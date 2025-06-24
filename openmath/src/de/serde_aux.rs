@@ -19,11 +19,8 @@ impl<'de> serde::de::Visitor<'de> for TaggedContentVisitor {
         S: serde::de::SeqAccess<'de>,
     {
         use serde::de::Error;
-        let tag = match tri!(seq.next_element()) {
-            Some(tag) => tag,
-            None => {
-                return Err(S::Error::missing_field("kind"));
-            }
+        let Some(tag) = tri!(seq.next_element()) else {
+            return Err(S::Error::missing_field("kind"));
         };
         let rest = SeqAccessDeserializer { seq };
         Ok((
@@ -54,10 +51,10 @@ impl<'de> serde::de::Visitor<'de> for TaggedContentVisitor {
                 }
             }
         }
-        match tag {
-            None => Err(de::Error::missing_field("kind")),
-            Some(tag) => Ok((tag, Content::Map(vec))),
-        }
+        tag.map_or_else(
+            || Err(de::Error::missing_field("kind")),
+            |tag| Ok((tag, Content::Map(vec))),
+        )
     }
 }
 
@@ -394,19 +391,19 @@ pub enum Content<'de> {
     Map(Vec<(Content<'de>, Content<'de>)>),
 }
 use serde::de::Unexpected;
-impl<'de> Content<'de> {
-    fn unexpected(&self) -> Unexpected {
+impl Content<'_> {
+    fn unexpected(&self) -> Unexpected<'_> {
         match *self {
             Content::Bool(b) => Unexpected::Bool(b),
-            Content::U8(n) => Unexpected::Unsigned(n as u64),
-            Content::U16(n) => Unexpected::Unsigned(n as u64),
-            Content::U32(n) => Unexpected::Unsigned(n as u64),
+            Content::U8(n) => Unexpected::Unsigned(n.into()),
+            Content::U16(n) => Unexpected::Unsigned(n.into()),
+            Content::U32(n) => Unexpected::Unsigned(n.into()),
             Content::U64(n) => Unexpected::Unsigned(n),
-            Content::I8(n) => Unexpected::Signed(n as i64),
-            Content::I16(n) => Unexpected::Signed(n as i64),
-            Content::I32(n) => Unexpected::Signed(n as i64),
+            Content::I8(n) => Unexpected::Signed(n.into()),
+            Content::I16(n) => Unexpected::Signed(n.into()),
+            Content::I32(n) => Unexpected::Signed(n.into()),
             Content::I64(n) => Unexpected::Signed(n),
-            Content::F32(f) => Unexpected::Float(f as f64),
+            Content::F32(f) => Unexpected::Float(f.into()),
             Content::F64(f) => Unexpected::Float(f),
             Content::Char(c) => Unexpected::Char(c),
             Content::String(ref s) => Unexpected::Str(s),
@@ -1046,14 +1043,11 @@ where
         let (variant, value) = match self.0 {
             Content::Map(value) => {
                 let mut iter = value.into_iter();
-                let (variant, value) = match iter.next() {
-                    Some(v) => v,
-                    None => {
-                        return Err(de::Error::invalid_value(
-                            de::Unexpected::Map,
-                            &"map with a single key",
-                        ));
-                    }
+                let Some((variant, value)) = iter.next() else {
+                    return Err(de::Error::invalid_value(
+                        de::Unexpected::Map,
+                        &"map with a single key",
+                    ));
                 };
                 // enums are encoded in json as maps with a single key:value pair
                 if iter.next().is_some() {
@@ -1112,8 +1106,8 @@ impl<'de, E> EnumDeserializer<'de, E>
 where
     E: de::Error,
 {
-    pub fn new(variant: Content<'de>, value: Option<Content<'de>>) -> EnumDeserializer<'de, E> {
-        EnumDeserializer {
+    pub const fn new(variant: Content<'de>, value: Option<Content<'de>>) -> Self {
+        Self {
             variant,
             value,
             err: PhantomData,
@@ -1156,23 +1150,25 @@ where
     type Error = E;
 
     fn unit_variant(self) -> Result<(), E> {
-        match self.value {
-            Some(value) => de::Deserialize::deserialize(ContentDeserializer(value, PhantomData)),
-            None => Ok(()),
-        }
+        self.value.map_or_else(
+            || Ok(()),
+            |value| de::Deserialize::deserialize(ContentDeserializer(value, PhantomData)),
+        )
     }
 
     fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value, E>
     where
         T: de::DeserializeSeed<'de>,
     {
-        match self.value {
-            Some(value) => seed.deserialize(ContentDeserializer(value, PhantomData)),
-            None => Err(de::Error::invalid_type(
-                de::Unexpected::UnitVariant,
-                &"newtype variant",
-            )),
-        }
+        self.value.map_or_else(
+            || {
+                Err(de::Error::invalid_type(
+                    de::Unexpected::UnitVariant,
+                    &"newtype variant",
+                ))
+            },
+            |value| seed.deserialize(ContentDeserializer(value, PhantomData)),
+        )
     }
 
     fn tuple_variant<V>(self, _len: usize, visitor: V) -> Result<V::Value, Self::Error>

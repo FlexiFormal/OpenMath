@@ -54,4 +54,6 @@ impl-tools = { workspace = true }
 paste = { workspace = true }
 document-features = { workspace = true }
 strum = { workspace = true }
+thiserror = { workspace = true }
+#base64 = { workspace = true }
 #derive_more = { workspace = true, features = ["from"] }

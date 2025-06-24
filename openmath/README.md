@@ -31,6 +31,7 @@ use openmath::{OMSerializable, Int};
 - structure sharing via OMR
 - attributions via OMATTR
 - omforeign, omerror
+- OMObject wrapper
 
 [1]: https://openmath.org/standard/om20-2019-07-01/omstd20.html
 [2]: https://openmath.org/cd/
