@@ -1,0 +1,78 @@
+[workspace]
+members = ["openmath", "ftml-uris"]
+exclude = []
+resolver = "3"
+
+[workspace.lints.clippy]
+enum_glob_use = "deny"
+pedantic = "deny"
+nursery = "deny"
+unwrap_used = "deny"
+
+#[workspace.metadata.docs.rs]
+#all-features = true
+#rustdoc-args = [
+#    "--cfg",
+#    "docsrs",
+#    "--html-in-header",
+#    "openmath/doc/katex-header.html",
+#    "--html-in-header",
+#    "doc/docs.html",
+#    "-Zunstable-options",
+#    "-Zrustdoc-scrape-examples",
+#    "--all-features",
+#    "--generate-link-to-definition",
+#]
+
+[workspace.dependencies]
+openmath = { path = "openmath" }
+ftml-uris = { path = "ftml-uris" }
+
+rustc-hash = "2"
+smallvec = { version = "2.0.0-alpha.11" }
+triomphe = "0.1"
+parking_lot = "0.12"
+criterion = { version = "0.5", features = ["tokio"] }
+paste = "1"
+thread_local = "1.1.8"
+hashbrown = "0.14.5"
+rand = "0.8"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+strumbra = "0.5"
+tokio = { version = "1" }
+tokio-uring = { version = "0.5" }
+nix = { version = "0.29" }
+rstest = { version = "0.25" }
+ctor = { version = "0.4" }
+dashmap = { version = "6" }
+async-broadcast = { version = "0.7" }
+serde = { version = "1" }
+bincode = { version = "2", features = ["serde"] }
+strum = { version = "0.27", features = ["derive"] }
+num-bigint = { version = "0.4" }
+url = { version = "2.5" }
+ordered-float = { version = "5" }
+dyn-clone = { version = "1" }
+ibig = "0.3"
+either = "1"
+either_of = "0.1"
+serde_json = "1"
+const_format = "0.2"
+enum_dispatch = "0.3"
+wasm-bindgen = "0.2"
+tsify-next = { version = "0.5", features = ["js"] }
+serde_with = "3"
+thiserror = "2"
+arrayvec = "0.7"
+leptos_router = "0.8"
+server_fn = "0.8"
+server_fn_macro_default = "0.8"
+document-features = "0.2"
+derive_more = "2"
+
+proc-macro2 = "1"
+quote = "1"
+syn = "2"
+proc-macro-crate = "3"
+impl-tools = { git = "https://github.com/kas-gui/impl-tools" } #"0.11"

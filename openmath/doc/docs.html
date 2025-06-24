@@ -1,0 +1,34 @@
+<style id="openmath">
+    p, .docblock > .openmath {
+    	margin: 0 0 .75em 0;
+    }
+    p:last-child, .docblock > .openmath:last-child {
+        margin: 0;
+    }
+    .openmath {
+        font-style: italic;
+    }
+    .content .docblock .openmath {
+    	border-left: 2px solid royalblue;
+    	padding: 14px;
+    	position: relative;
+    	/* The "!important" part is required because the rule is otherwise overruled in this CSS
+    	selector: ".docblock > :not(.more-examples-toggle):not(.example-wrap)" */
+    	overflow-x: visible !important;
+    }
+    .openmath-wip { opacity:0.7; }
+    .content .docblock .openmath::before {
+    	color: royalblue;
+    	content: "OM";
+    	position: absolute;
+    	left: -50px;
+    	top: 5px;
+    	font-weight: bold;
+    	font-size: 1.8rem;
+        text-shadow: 1px 0 0 black,-1px 0 0 black,0 1px 0 black,0 -1px 0 black;
+    }
+    .top-doc > .docblock >.openmath:first-child::before {
+        top: 10px;
+    }
+
+</style>
