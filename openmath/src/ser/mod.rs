@@ -54,7 +54,7 @@ fn serde_test() {
     println!("{}", json); // Outputs OpenMath JSON representation
 }
 ```
-[^1]: https://openmath.org/standard/om20-2019-07-01/omstd20.html#sec_json-the-json-encoding
+[^1]: <https://openmath.org/standard/om20-2019-07-01/omstd20.html#sec_json-the-json-encoding>
 */
 
 use std::fmt::Write;

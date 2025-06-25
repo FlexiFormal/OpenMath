@@ -154,7 +154,7 @@ assert_eq!(r.take().0, 4);
 # }
 ```
 
-[^1]: https://openmath.org/standard/om20-2019-07-01/omstd20.html#sec_json-the-json-encoding
+[^1]: <https://openmath.org/standard/om20-2019-07-01/omstd20.html#sec_json-the-json-encoding>
 */
 pub trait OMDeserializable<'de, Arr = Cow<'de, [u8]>, Str = &'de str>: std::fmt::Debug
 where

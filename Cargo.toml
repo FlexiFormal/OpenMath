@@ -70,6 +70,7 @@ server_fn = "0.8"
 server_fn_macro_default = "0.8"
 document-features = "0.2"
 derive_more = "2"
+base64 = "0.22"
 
 proc-macro2 = "1"
 quote = "1"
