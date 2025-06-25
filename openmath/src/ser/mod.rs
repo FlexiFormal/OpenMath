@@ -12,6 +12,9 @@ and cloning wherever possible.
   as prefix (see below for an example)
 - **Serde-based**: Serialize to any serde-compatible format by using <code>self.[openmath_serde()](OMSerializable::openmath_serde())</code>
   instead of `self` (requires the `serde` feature).
+  The implementation follows the official OpenMath JSON encoding[^1], so using
+  [`serde_json`](https://docs.rs/serde_json) allows for serializing to specification-compliant
+  JSON.
 
 ## Examples
 
@@ -51,6 +54,7 @@ fn serde_test() {
     println!("{}", json); // Outputs OpenMath JSON representation
 }
 ```
+[^1]: https://openmath.org/standard/om20-2019-07-01/omstd20.html#sec_json-the-json-encoding
 */
 
 use std::fmt::Write;

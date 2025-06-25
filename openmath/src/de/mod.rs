@@ -41,7 +41,7 @@ and finally `OMA( OMS(s1), OMA( OMS(s2), OMI(1) ), OMI(3) )`.
   an error already.
   The implementation follows the official OpenMath JSON encoding[^1], so using
   [`serde_json`](https://docs.rs/serde_json) allows for deserializing specification-compliant
-  JSON
+  JSON.
 
 ## Parameters
 - `'de`: The lifetime of the deserialized data; tied to the e.g. string from which it gets
@@ -317,6 +317,7 @@ where
         body: Either<I, Box<Self>>,
     },
 }
+
 /// Type alias for owned OpenMath objects.
 ///
 /// This is a convenience type alias for [`OpenMath`] objects that own their

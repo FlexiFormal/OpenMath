@@ -32,6 +32,7 @@ use openmath::{OMSerializable, Int};
 - attributions via OMATTR
 - omforeign, omerror
 - OMObject wrapper
+- binary, xml
 
 [1]: https://openmath.org/standard/om20-2019-07-01/omstd20.html
 [2]: https://openmath.org/cd/

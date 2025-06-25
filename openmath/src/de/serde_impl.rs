@@ -302,6 +302,7 @@ where
     where
         E: serde::de::Error,
     {
+        use crate::base64::Base64Decodable;
         let OMB::<'_, Arr, Str> { bytes, base64, .. } =
             serde::Deserialize::deserialize(deserializer)?;
         let arr = if let Some(bytes) = bytes {
@@ -312,7 +313,13 @@ where
             }
             bytes
         } else if let Some(base64) = base64 {
-            crate::base64::decode(base64.as_ref())
+            base64
+                .as_bytes()
+                .iter()
+                .copied()
+                .decode_base64()
+                .flat()
+                .collect::<Result<Vec<_>, _>>()
                 .map_err(E::custom)?
                 .into()
         } else {

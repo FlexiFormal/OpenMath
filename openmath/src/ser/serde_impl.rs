@@ -140,9 +140,10 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
     where
         I::IntoIter: ExactSizeIterator,
     {
+        use crate::base64::Base64Encodable;
         let mut struc = self.s.serialize_struct("OMObject", 2)?;
         struc.serialize_field("kind", "OMB")?;
-        let s = crate::base64::encode(bytes);
+        let s = bytes.into_iter().base64().into_string();
         struc.serialize_field("base64", &s)?;
         struc.end()
     }
