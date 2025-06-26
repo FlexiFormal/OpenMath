@@ -43,7 +43,7 @@ pub static OPENMATH_BASE_URI: std::sync::LazyLock<url::Url> = std::sync::LazyLoc
 /// (possibly empty) field [attrs](OpenMathObject::attrs) for attributions.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[repr(u8)]
-pub enum OpenMath<'de, Rec, Arg, Arr = Cow<'de, [u8]>, Str = &'de str>
+pub enum OMExpr<'de, Rec, Arg, Arr = Cow<'de, [u8]>, Str = &'de str>
 where
     Arr: de::Bytes<'de>,
     Str: de::StringLike<'de>,
@@ -116,7 +116,7 @@ where
     } = OpenMathKind::OMBIND as _,
 }
 
-impl<'de, Rec, Arg, Arr, Str> OpenMath<'de, Rec, Arg, Arr, Str>
+impl<'de, Rec, Arg, Arr, Str> OMExpr<'de, Rec, Arg, Arr, Str>
 where
     Arr: de::Bytes<'de>,
     Str: de::StringLike<'de>,
@@ -244,22 +244,23 @@ pub enum OpenMathKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OpenMathObject<'de, Rec, Arg, Arr = Cow<'de, [u8]>, Str = &'de str>
+pub struct OMObjectInner<'de, Rec, Arg, Arr = Cow<'de, [u8]>, Str = &'de str>
 where
     Arr: de::Bytes<'de>,
     Str: de::StringLike<'de>,
 {
-    pub object: OpenMath<'de, Rec, Arg, Arr, Str>,
+    pub object: OMExpr<'de, Rec, Arg, Arr, Str>,
     pub attrs: Vec<(Uri<'de>, OMOrForeign<'de, Rec, Arg, Arr, Str>)>,
 }
-impl<'de, Rec, Arg, Arr, Str> From<OpenMath<'de, Rec, Arg, Arr, Str>>
-    for OpenMathObject<'de, Rec, Arg, Arr, Str>
+
+impl<'de, Rec, Arg, Arr, Str> From<OMExpr<'de, Rec, Arg, Arr, Str>>
+    for OMObjectInner<'de, Rec, Arg, Arr, Str>
 where
     Arr: de::Bytes<'de>,
     Str: de::StringLike<'de>,
 {
     #[inline]
-    fn from(object: OpenMath<'de, Rec, Arg, Arr, Str>) -> Self {
+    fn from(object: OMExpr<'de, Rec, Arg, Arr, Str>) -> Self {
         Self {
             object,
             attrs: Vec::new(),
@@ -267,19 +268,19 @@ where
     }
 }
 
-impl<'de, Rec, Arg, Arr, Str> std::ops::Deref for OpenMathObject<'de, Rec, Arg, Arr, Str>
+impl<'de, Rec, Arg, Arr, Str> std::ops::Deref for OMObjectInner<'de, Rec, Arg, Arr, Str>
 where
     Arr: de::Bytes<'de>,
     Str: de::StringLike<'de>,
 {
-    type Target = OpenMath<'de, Rec, Arg, Arr, Str>;
+    type Target = OMExpr<'de, Rec, Arg, Arr, Str>;
     #[inline]
     fn deref(&self) -> &Self::Target {
         &self.object
     }
 }
 
-impl<'de, Rec, Arg, Arr, Str> OpenMathObject<'de, Rec, Arg, Arr, Str>
+impl<'de, Rec, Arg, Arr, Str> OMObjectInner<'de, Rec, Arg, Arr, Str>
 where
     Arr: de::Bytes<'de>,
     Str: de::StringLike<'de>,
@@ -304,24 +305,13 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Uri<'de, Str = &'de str>
-where
-    Str: de::StringLike<'de>,
-{
-    pub cdbase: Str,
-    pub cd: Str,
-    pub name: Str,
-    pub phantom: &'de (),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OMOrForeign<'de, Rec, Arg, Arr = Cow<'de, [u8]>, Str = &'de str>
 where
     Arr: de::Bytes<'de>,
     Str: de::StringLike<'de>,
 {
     OMForeign { encoding: Option<Str>, foreign: Str },
-    Object(OpenMathObject<'de, Rec, Arg, Arr, Str>),
+    Object(OMObjectInner<'de, Rec, Arg, Arr, Str>),
 }
 impl<'de, Rec, Arg, Arr, Str> OMOrForeign<'de, Rec, Arg, Arr, Str>
 where
@@ -337,11 +327,32 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OMObject(pub OpenMathObject<'static, Box<Self>, Self, Vec<u8>, String>);
-impl std::ops::Deref for OMObject {
-    type Target = OpenMathObject<'static, Box<Self>, Self, Vec<u8>, String>;
+pub struct OpenMathObject<Arr = Vec<u8>, Str = String>(
+    pub OMObjectInner<'static, Box<Self>, Self, Arr, Str>,
+)
+where
+    Arr: de::Bytes<'static>,
+    Str: de::StringLike<'static>;
+
+impl<Arr, Str> std::ops::Deref for OpenMathObject<Arr, Str>
+where
+    Arr: de::Bytes<'static>,
+    Str: de::StringLike<'static>,
+{
+    type Target = OMObjectInner<'static, Box<Self>, Self, Arr, Str>;
     #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Uri<'de, Str = &'de str>
+where
+    Str: de::StringLike<'de>,
+{
+    pub cdbase: Option<Str>,
+    pub cd: Str,
+    pub name: Str,
+    pub phantom: &'de (),
 }

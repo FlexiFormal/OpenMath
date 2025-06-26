@@ -28,10 +28,10 @@ use openmath::{OMSerializable, Int};
 
 ## TODO
 
+- attributions via OMATTR (ser/de)
 - structure sharing via OMR
-- attributions via OMATTR
-- omforeign, omerror
-- OMObject wrapper
+- omforeign, ome
+- OMObject wrapper (ser/de)
 - binary, xml
 
 [1]: https://openmath.org/standard/om20-2019-07-01/omstd20.html
