@@ -85,9 +85,11 @@ where
                 enum Fields {
                     kind,
                     openmath,
+                    cdbase,
                     object,
                 }
                 let mut obj = None;
+                let mut cdbase: Option<Str> = None;
                 while let Some(key) = map.next_key()? {
                     match key {
                         Fields::kind => {
@@ -98,20 +100,40 @@ where
                         Fields::openmath => {
                             map.next_value::<serde::de::IgnoredAny>()?;
                         }
+                        Fields::cdbase => {
+                            cdbase = Some(map.next_value()?);
+                        }
+                        Fields::object if cdbase.is_some() => {
+                            let cdbase = unsafe { cdbase.take().unwrap_unchecked() };
+                            obj = Some(
+                                match map
+                                    .next_value_seed(OMDeInner(Either::Left(cdbase), PhantomData))?
+                                    .0
+                                {
+                                    Left(o) => o,
+                                    Right(e) => {
+                                        return Err(A::Error::custom(format!(
+                                            "OpenMath object does not represent a valid instance of {}: {e:?}",
+                                            std::any::type_name::<O>(),
+                                        )));
+                                    }
+                                },
+                            );
+                        }
                         Fields::object => {
-                            obj = Some(map.next_value()?);
+                            obj = Some(map.next_value::<OMFromSerde<_, _, _>>()?.0);
                         }
                     }
                 }
-                let Some(obj): Option<OMFromSerde<_, _, _>> = obj else {
+                let Some(obj) = obj else {
                     return Err(A::Error::custom("missing object field"));
                 };
-                Ok(super::OMObject(obj.take(), PhantomData))
+                Ok(super::OMObject(obj, PhantomData))
             }
         }
         deserializer.deserialize_struct(
             "OMObject",
-            &["kind", "openmath", "object"],
+            &["kind", "openmath", "cdbase", "object"],
             Visitor(PhantomData),
         )
     }

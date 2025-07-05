@@ -5,6 +5,8 @@
 //pub(crate) mod serde_aux;
 #[cfg(feature = "serde")]
 pub(crate) mod serde_impl;
+#[cfg(feature = "xml")]
+pub(crate) mod xml;
 use std::borrow::Cow;
 
 use crate::{OMKind, either::Either};

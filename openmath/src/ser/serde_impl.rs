@@ -37,9 +37,16 @@ impl<O: OMSerializable + ?Sized> serde::Serialize for super::OMObject<'_, O> {
     where
         S: Serializer,
     {
-        let mut s = serializer.serialize_struct("OMObject", 3)?;
+        let cd_base = self.0.cd_base();
+        let mut s =
+            serializer.serialize_struct("OMObject", if cd_base.is_some() { 4 } else { 3 })?;
         s.serialize_field("kind", "OMOBJ")?;
         s.serialize_field("openmath", "2.0")?;
+        if let Some(b) = self.0.cd_base() {
+            s.serialize_field("cdbase", b)?;
+        } else {
+            s.skip_field("cdbase")?;
+        }
         s.serialize_field("object", &self.0.openmath_serde())?;
         s.end()
     }

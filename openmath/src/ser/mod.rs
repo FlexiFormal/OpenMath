@@ -61,6 +61,8 @@ use std::fmt::Write;
 
 #[cfg(feature = "serde")]
 mod serde_impl;
+#[cfg(feature = "xml")]
+pub(crate) mod xml;
 
 /// Trait for [`OMSerializer`]-Errors;
 pub trait Error {
