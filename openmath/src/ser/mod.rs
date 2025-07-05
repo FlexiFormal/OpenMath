@@ -196,6 +196,13 @@ pub trait OMSerializable {
     fn openmath_serde(&self) -> impl ::serde::Serialize + use<'_, Self> {
         serde_impl::SerdeSerializer(self, self.cd_base(), crate::OPENMATH_BASE_URI.as_str())
     }
+
+    /// returns this element as something that serializes into an OMOBJ; i.e. a "top-level"
+    /// OpenMath object.
+    #[inline]
+    fn omobject(&self) -> OMObject<'_, Self> {
+        OMObject(self)
+    }
 }
 
 impl<A: OMSerializable, B: OMSerializable> OMSerializable for either::Either<A, B> {
@@ -526,6 +533,15 @@ pub trait OMSerializer<'s>: Sized {
     ) -> Result<Self::Ok, Self::Err>
     where
         I::IntoIter: ExactSizeIterator;
+}
+
+/// Wrapper that produces an OMOBJ wrapper in serialization
+#[impl_tools::autoimpl(Copy, Clone)]
+pub struct OMObject<'s, O: OMSerializable + ?Sized>(pub &'s O);
+impl<O: OMSerializable> std::fmt::Display for OMObject<'_, O> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "OMOBJ({})", self.0.openmath_display())
+    }
 }
 
 /// Convenience structure for producing OMS triples in [as_openmath](OMSerializable::as_openmath)

@@ -25,13 +25,97 @@
 use either::Either::{Left, Right};
 use serde::{Deserialize, de::DeserializeSeed};
 
-use super::OpenMath;
+use super::OM;
 use crate::{
-    OMDeserializable, OpenMathKind,
+    OMDeserializable, OMKind,
     de::{OMForeign, StringLike},
     either::Either,
 };
 use std::{borrow::Cow, marker::PhantomData};
+
+impl<'de, Arr, Str, O: OMDeserializable<'de, Arr, Str> + 'de> serde::Deserialize<'de>
+    for super::OMObject<'de, O, Arr, Str>
+where
+    Arr: super::Bytes<'de>,
+    Str: super::StringLike<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct Visitor<'de, Arr, Str, O: OMDeserializable<'de, Arr, Str>>(
+            PhantomData<&'de (Arr, Str, O)>,
+        )
+        where
+            Arr: super::Bytes<'de>,
+            Str: super::StringLike<'de>;
+        impl<'de, Arr, Str, O: OMDeserializable<'de, Arr, Str> + 'de> serde::de::Visitor<'de>
+            for Visitor<'de, Arr, Str, O>
+        where
+            Arr: super::Bytes<'de>,
+            Str: super::StringLike<'de>,
+        {
+            type Value = super::OMObject<'de, O, Arr, Str>;
+            #[inline]
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("an OMOBJ struct")
+            }
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                use serde::de::Error;
+                let Some("OMOBJ") = seq.next_element()? else {
+                    return Err(A::Error::custom("missing kind=\"OMOBJ\""));
+                };
+                let _ = seq.next_element::<serde::de::IgnoredAny>()?;
+                let Some(o) = seq.next_element::<OMFromSerde<'de, O, _, _>>()? else {
+                    return Err(A::Error::custom("missing object"));
+                };
+                Ok(super::OMObject(o.take(), PhantomData))
+            }
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                use serde::de::Error;
+
+                #[derive(serde::Deserialize)]
+                #[allow(non_camel_case_types)]
+                enum Fields {
+                    kind,
+                    openmath,
+                    object,
+                }
+                let mut obj = None;
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Fields::kind => {
+                            if map.next_value::<&'de str>()? != "OMOBJ" {
+                                return Err(A::Error::custom("invalid kind"));
+                            }
+                        }
+                        Fields::openmath => {
+                            map.next_value::<serde::de::IgnoredAny>()?;
+                        }
+                        Fields::object => {
+                            obj = Some(map.next_value()?);
+                        }
+                    }
+                }
+                let Some(obj): Option<OMFromSerde<_, _, _>> = obj else {
+                    return Err(A::Error::custom("missing object field"));
+                };
+                Ok(super::OMObject(obj.take(), PhantomData))
+            }
+        }
+        deserializer.deserialize_struct(
+            "OMObject",
+            &["kind", "openmath", "object"],
+            Visitor(PhantomData),
+        )
+    }
+}
 
 /// Wrapper type for deserializing OpenMath objects via serde.
 ///
@@ -141,7 +225,7 @@ where
 }
 
 struct OMDe<'de, OMD, Arr = Cow<'de, [u8]>, Str = &'de str>(
-    Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>,
+    Either<OMD, super::OM<'de, OMD, Arr, Str>>,
     PhantomData<(&'de (), Arr, Str)>,
 )
 where
@@ -286,7 +370,7 @@ impl<
         self,
         _id: Option<&'de str>,
         mut seq: A,
-    ) -> Result<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>, A::Error>
+    ) -> Result<Either<OMD, super::OM<'de, OMD, Arr, Str>>, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -295,14 +379,14 @@ impl<
             return Err(A::Error::custom("missing value in OMI"));
         };
         while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
-        OMD::from_openmath(OpenMath::OMI(v), &self.0).map_err(A::Error::custom)
+        OMD::from_openmath(OM::OMI(v), &self.0).map_err(A::Error::custom)
     }
 
     fn visit_seq_omf<A>(
         self,
         _id: Option<&'de str>,
         mut seq: A,
-    ) -> Result<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>, A::Error>
+    ) -> Result<Either<OMD, super::OM<'de, OMD, Arr, Str>>, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -311,14 +395,14 @@ impl<
             return Err(A::Error::custom("missing value in OMF"));
         };
         while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
-        OMD::from_openmath(OpenMath::OMF(v), &self.0).map_err(A::Error::custom)
+        OMD::from_openmath(OM::OMF(v), &self.0).map_err(A::Error::custom)
     }
 
     fn visit_seq_omstr<A>(
         self,
         _id: Option<&'de str>,
         mut seq: A,
-    ) -> Result<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>, A::Error>
+    ) -> Result<Either<OMD, super::OM<'de, OMD, Arr, Str>>, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -327,14 +411,14 @@ impl<
             return Err(A::Error::custom("missing value in OMSTR"));
         };
         while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
-        OMD::from_openmath(OpenMath::OMSTR(v), &self.0).map_err(A::Error::custom)
+        OMD::from_openmath(OM::OMSTR(v), &self.0).map_err(A::Error::custom)
     }
 
     fn visit_seq_omb<A>(
         self,
         _id: Option<&'de str>,
         mut seq: A,
-    ) -> Result<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>, A::Error>
+    ) -> Result<Either<OMD, super::OM<'de, OMD, Arr, Str>>, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -343,14 +427,14 @@ impl<
             return Err(A::Error::custom("missing value in OMB"));
         };
         while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
-        OMD::from_openmath(OpenMath::OMB(v), &self.0).map_err(A::Error::custom)
+        OMD::from_openmath(OM::OMB(v), &self.0).map_err(A::Error::custom)
     }
 
     fn visit_seq_omv<A>(
         self,
         _id: Option<&'de str>,
         mut seq: A,
-    ) -> Result<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>, A::Error>
+    ) -> Result<Either<OMD, super::OM<'de, OMD, Arr, Str>>, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -359,14 +443,14 @@ impl<
             return Err(A::Error::custom("missing value in OMV"));
         };
         while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
-        OMD::from_openmath(OpenMath::OMV(v), &self.0).map_err(A::Error::custom)
+        OMD::from_openmath(OM::OMV(v), &self.0).map_err(A::Error::custom)
     }
 
     fn visit_seq_oms<A>(
         self,
         _id: Option<&'de str>,
         mut seq: A,
-    ) -> Result<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>, A::Error>
+    ) -> Result<Either<OMD, super::OM<'de, OMD, Arr, Str>>, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -384,14 +468,14 @@ impl<
         //cdbase.as_ref().map_or::<&str, _>(&self.0, |s| s.as_ref());
 
         while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
-        OMD::from_openmath(OpenMath::OMS { cd_name: cd, name }, cdbase).map_err(A::Error::custom)
+        OMD::from_openmath(OM::OMS { cd_name: cd, name }, cdbase).map_err(A::Error::custom)
     }
 
     fn visit_seq_ome<A>(
         self,
         _id: Option<&'de str>,
         mut seq: A,
-    ) -> Result<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>, A::Error>
+    ) -> Result<Either<OMD, super::OM<'de, OMD, Arr, Str>>, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -418,7 +502,7 @@ impl<
 
         while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
         OMD::from_openmath(
-            OpenMath::OME {
+            OM::OME {
                 cd_base: cdbase,
                 cd_name,
                 name,
@@ -433,7 +517,7 @@ impl<
         self,
         _id: Option<&'de str>,
         mut seq: A,
-    ) -> Result<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>, A::Error>
+    ) -> Result<Either<OMD, super::OM<'de, OMD, Arr, Str>>, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -458,7 +542,7 @@ impl<
 
         while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
         OMD::from_openmath(
-            OpenMath::OMA {
+            OM::OMA {
                 head: head.0.map_right(Box::new),
                 args,
             },
@@ -471,7 +555,7 @@ impl<
         self,
         _id: Option<&'de str>,
         mut seq: A,
-    ) -> Result<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>, A::Error>
+    ) -> Result<Either<OMD, super::OM<'de, OMD, Arr, Str>>, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -504,7 +588,7 @@ impl<
 
         while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
         OMD::from_openmath(
-            OpenMath::OMBIND {
+            OM::OMBIND {
                 head: head.0.map_right(Box::new),
                 context,
                 body: body.0.map_right(Box::new),
@@ -540,7 +624,7 @@ impl<
         mut decimal: Option<&'de str>,
         mut hexadecimal: Option<&'de str>,
         mut map: A,
-    ) -> Result<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>, A::Error>
+    ) -> Result<Either<OMD, super::OM<'de, OMD, Arr, Str>>, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
@@ -559,7 +643,7 @@ impl<
                     "OMI can not have more than one of the fields `integer`, `decimal`, `hexadecimal`",
                 ));
             }
-            return OMD::from_openmath(OpenMath::OMI(i.into()), &self.0).map_err(A::Error::custom);
+            return OMD::from_openmath(OM::OMI(i.into()), &self.0).map_err(A::Error::custom);
         }
         if let Some(d) = decimal {
             if hexadecimal.is_some() {
@@ -568,7 +652,7 @@ impl<
                 ));
             }
             return OMD::from_openmath(
-                OpenMath::OMI(
+                OM::OMI(
                     d.into_int()
                         .ok_or_else(|| A::Error::custom("invalid decimal number"))?,
                 ),
@@ -591,7 +675,7 @@ impl<
         mut decimal: Option<&'de str>,
         mut hexadecimal: Option<&'de str>,
         mut map: A,
-    ) -> Result<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>, A::Error>
+    ) -> Result<Either<OMD, super::OM<'de, OMD, Arr, Str>>, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
@@ -610,7 +694,7 @@ impl<
                     "OMF can not have more than one of the fields `float`, `decimal`, `hexadecimal`",
                 ));
             }
-            return OMD::from_openmath(OpenMath::OMF(i), &self.0).map_err(A::Error::custom);
+            return OMD::from_openmath(OM::OMF(i), &self.0).map_err(A::Error::custom);
         }
         if let Some(d) = decimal {
             if hexadecimal.is_some() {
@@ -619,7 +703,7 @@ impl<
                 ));
             }
             return OMD::from_openmath(
-                OpenMath::OMF(
+                OM::OMF(
                     d.parse().map_err(|e| {
                         A::Error::custom(format_args!("invalid decimal number: {e}"))
                     })?,
@@ -641,7 +725,7 @@ impl<
         _id: Option<&'de str>,
         mut string: Option<Str>,
         mut map: A,
-    ) -> Result<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>, A::Error>
+    ) -> Result<Either<OMD, super::OM<'de, OMD, Arr, Str>>, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
@@ -657,7 +741,7 @@ impl<
             }
         }
         if let Some(s) = string {
-            return OMD::from_openmath(OpenMath::OMSTR(s), &self.0).map_err(A::Error::custom);
+            return OMD::from_openmath(OM::OMSTR(s), &self.0).map_err(A::Error::custom);
         }
         Err(A::Error::custom("Missing value for OMSTR"))
     }
@@ -668,7 +752,7 @@ impl<
         mut bytes: Option<Arr>,
         mut base64: Option<&'de str>,
         mut map: A,
-    ) -> Result<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>, A::Error>
+    ) -> Result<Either<OMD, super::OM<'de, OMD, Arr, Str>>, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
@@ -703,7 +787,7 @@ impl<
         } else {
             return Err(A::Error::custom("Missing value for OMB"));
         };
-        OMD::from_openmath(OpenMath::OMB(arr), &self.0).map_err(A::Error::custom)
+        OMD::from_openmath(OM::OMB(arr), &self.0).map_err(A::Error::custom)
     }
 
     fn visit_map_omv<A>(
@@ -711,7 +795,7 @@ impl<
         _id: Option<&'de str>,
         mut name: Option<Str>,
         mut map: A,
-    ) -> Result<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>, A::Error>
+    ) -> Result<Either<OMD, super::OM<'de, OMD, Arr, Str>>, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
@@ -725,7 +809,7 @@ impl<
             }
         }
         if let Some(name) = name {
-            return OMD::from_openmath(OpenMath::OMV(name), &self.0).map_err(A::Error::custom);
+            return OMD::from_openmath(OM::OMV(name), &self.0).map_err(A::Error::custom);
         }
         Err(A::Error::custom("Missing value for OMV"))
     }
@@ -737,7 +821,7 @@ impl<
         mut cd: Option<Str>,
         mut name: Option<Str>,
         mut map: A,
-    ) -> Result<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>, A::Error>
+    ) -> Result<Either<OMD, super::OM<'de, OMD, Arr, Str>>, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
@@ -759,7 +843,7 @@ impl<
             return Err(A::Error::custom("Missing name for OMS"));
         };
         let cdbase = cdbase.unwrap_or(&self.0);
-        OMD::from_openmath(OpenMath::OMS { cd_name: cd, name }, cdbase).map_err(A::Error::custom)
+        OMD::from_openmath(OM::OMS { cd_name: cd, name }, cdbase).map_err(A::Error::custom)
     }
 
     fn visit_map_ome<A>(
@@ -769,7 +853,7 @@ impl<
         error: Option<serde::__private::de::Content<'de>>,
         arguments: Option<serde::__private::de::Content<'de>>,
         mut map: A,
-    ) -> Result<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>, A::Error>
+    ) -> Result<Either<OMD, super::OM<'de, OMD, Arr, Str>>, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
@@ -808,7 +892,7 @@ impl<
         }) = error
         {
             return OMD::from_openmath(
-                OpenMath::OME {
+                OM::OME {
                     cd_base: cdbase,
                     cd_name: cd,
                     name,
@@ -828,7 +912,7 @@ impl<
         applicant: Option<serde::__private::de::Content<'de>>,
         arguments: Option<serde::__private::de::Content<'de>>,
         mut map: A,
-    ) -> Result<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>, A::Error>
+    ) -> Result<Either<OMD, super::OM<'de, OMD, Arr, Str>>, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
@@ -869,7 +953,7 @@ impl<
         }
         if let Some(head) = applicant {
             return OMD::from_openmath(
-                OpenMath::OMA {
+                OM::OMA {
                     head: head.0.map_right(Box::new),
                     args: arguments.unwrap_or_default(),
                 },
@@ -888,7 +972,7 @@ impl<
         mut variables: Option<Vec<Str>>,
         object: Option<serde::__private::de::Content<'de>>,
         mut map: A,
-    ) -> Result<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>, A::Error>
+    ) -> Result<Either<OMD, super::OM<'de, OMD, Arr, Str>>, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
@@ -942,7 +1026,7 @@ impl<
             return Err(A::Error::custom("Missing variables for OMBIND"));
         };
         OMD::from_openmath(
-            OpenMath::OMBIND {
+            OM::OMBIND {
                 head: binder.0.map_right(Box::new),
                 context: variables,
                 body: object.0.map_right(Box::new),
@@ -987,32 +1071,30 @@ impl<
     fn seq_om<A>(
         self,
         mut seq: A,
-        kind: OpenMathKind,
-    ) -> Result<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>, A::Error>
+        kind: OMKind,
+    ) -> Result<Either<OMD, super::OM<'de, OMD, Arr, Str>>, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
         use serde::de::Error;
         let id = seq.next_element::<Option<&'de str>>()?.unwrap_or_default();
         match kind {
-            OpenMathKind::OMI => self.visit_seq_omi(id, seq),
-            OpenMathKind::OMF => self.visit_seq_omf(id, seq),
-            OpenMathKind::OMSTR => self.visit_seq_omstr(id, seq),
-            OpenMathKind::OMB => self.visit_seq_omb(id, seq),
-            OpenMathKind::OMV => self.visit_seq_omv(id, seq),
-            OpenMathKind::OMS => self.visit_seq_oms(id, seq),
-            OpenMathKind::OME => self.visit_seq_ome(id, seq),
-            OpenMathKind::OMA => self.visit_seq_oma(id, seq),
-            OpenMathKind::OMBIND => self.visit_seq_ombind(id, seq),
-            OpenMathKind::OMFOREIGN => {
-                Err(A::Error::custom("OMFOREIGN is not allowed as an OMObject"))
-            }
-            OpenMathKind::OMATTR => todo!(),
-            OpenMathKind::OMR => todo!(),
+            OMKind::OMI => self.visit_seq_omi(id, seq),
+            OMKind::OMF => self.visit_seq_omf(id, seq),
+            OMKind::OMSTR => self.visit_seq_omstr(id, seq),
+            OMKind::OMB => self.visit_seq_omb(id, seq),
+            OMKind::OMV => self.visit_seq_omv(id, seq),
+            OMKind::OMS => self.visit_seq_oms(id, seq),
+            OMKind::OME => self.visit_seq_ome(id, seq),
+            OMKind::OMA => self.visit_seq_oma(id, seq),
+            OMKind::OMBIND => self.visit_seq_ombind(id, seq),
+            OMKind::OMFOREIGN => Err(A::Error::custom("OMFOREIGN is not allowed as an OMObject")),
+            OMKind::OMATTR => todo!(),
+            OMKind::OMR => todo!(),
         }
     }
 
-    fn map_state<A>(map: &mut A) -> Result<(OpenMathKind, FieldState<'de, Arr, Str>), A::Error>
+    fn map_state<A>(map: &mut A) -> Result<(OMKind, FieldState<'de, Arr, Str>), A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
@@ -1052,10 +1134,10 @@ impl<
     #[allow(clippy::too_many_lines)]
     fn om_map<A>(
         self,
-        kind: OpenMathKind,
+        kind: OMKind,
         state: FieldState<'de, Arr, Str>,
         map: A,
-    ) -> Result<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>, A::Error>
+    ) -> Result<Either<OMD, super::OM<'de, OMD, Arr, Str>>, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
@@ -1073,7 +1155,7 @@ impl<
                 }}
             }
         match kind {
-            OpenMathKind::OMI => {
+            OMKind::OMI => {
                 ass!(
                     OMI != float,
                     string,
@@ -1098,7 +1180,7 @@ impl<
                     map,
                 )
             }
-            OpenMathKind::OMF => {
+            OMKind::OMF => {
                 ass!(
                     OMF != integer,
                     string,
@@ -1117,7 +1199,7 @@ impl<
                 );
                 self.visit_map_omf(state.id, state.float, state.decimal, state.hexadecimal, map)
             }
-            OpenMathKind::OMSTR => {
+            OMKind::OMSTR => {
                 ass!(
                     OMSTR != integer,
                     float,
@@ -1138,7 +1220,7 @@ impl<
                 );
                 self.visit_map_omstr(state.id, state.string, map)
             }
-            OpenMathKind::OMB => {
+            OMKind::OMB => {
                 ass!(
                     OMB != integer,
                     float,
@@ -1158,7 +1240,7 @@ impl<
                 );
                 self.visit_map_omb(state.id, state.bytes, state.base64, map)
             }
-            OpenMathKind::OMV => {
+            OMKind::OMV => {
                 ass!(
                     OMV != integer,
                     string,
@@ -1179,7 +1261,7 @@ impl<
                 );
                 self.visit_map_omv(state.id, state.name, map)
             }
-            OpenMathKind::OMS => {
+            OMKind::OMS => {
                 ass!(
                     OMS != integer,
                     float,
@@ -1199,7 +1281,7 @@ impl<
                 );
                 self.visit_map_oms(state.id, state.cdbase, state.cd, state.name, map)
             }
-            OpenMathKind::OME => {
+            OMKind::OME => {
                 ass!(
                     OME != integer,
                     float,
@@ -1219,7 +1301,7 @@ impl<
                 );
                 self.visit_map_ome(state.id, state.cdbase, state.error, state.arguments, map)
             }
-            OpenMathKind::OMA => {
+            OMKind::OMA => {
                 ass!(
                     OMA != integer,
                     string,
@@ -1245,7 +1327,7 @@ impl<
                     map,
                 )
             }
-            OpenMathKind::OMBIND => {
+            OMKind::OMBIND => {
                 ass!(
                     OMBIND != integer,
                     float,
@@ -1271,11 +1353,9 @@ impl<
                     map,
                 )
             }
-            OpenMathKind::OMFOREIGN => {
-                Err(A::Error::custom("OMFOREIGN is not allowed as an OMObject"))
-            }
-            OpenMathKind::OMATTR => todo!(),
-            OpenMathKind::OMR => todo!(),
+            OMKind::OMFOREIGN => Err(A::Error::custom("OMFOREIGN is not allowed as an OMObject")),
+            OMKind::OMATTR => todo!(),
+            OMKind::OMR => todo!(),
         }
     }
 }
@@ -1283,7 +1363,7 @@ impl<
 impl<'de, Arr: super::Bytes<'de>, Str: super::StringLike<'de>, OMD: OMDeserializable<'de, Arr, Str>>
     serde::de::Visitor<'de> for OMVisitor<'de, '_, Arr, Str, OMD, false>
 {
-    type Value = Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>;
+    type Value = Either<OMD, super::OM<'de, OMD, Arr, Str>>;
     #[inline]
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("struct OMObject")
@@ -1294,7 +1374,7 @@ impl<'de, Arr: super::Bytes<'de>, Str: super::StringLike<'de>, OMD: OMDeserializ
         A: serde::de::SeqAccess<'de>,
     {
         use serde::de::Error;
-        let Some(kind) = seq.next_element::<OpenMathKind>()? else {
+        let Some(kind) = seq.next_element::<OMKind>()? else {
             return Err(A::Error::custom("missing kind in OpenMath object"));
         };
         self.seq_om(seq, kind)
@@ -1323,10 +1403,10 @@ impl<'de, Arr: super::Bytes<'de>, Str: super::StringLike<'de>, OMD: OMDeserializ
         A: serde::de::SeqAccess<'de>,
     {
         use serde::de::Error;
-        let Some(kind) = seq.next_element::<OpenMathKind>()? else {
+        let Some(kind) = seq.next_element::<OMKind>()? else {
             return Err(A::Error::custom("missing kind in OpenMath object"));
         };
-        if kind == OpenMathKind::OMFOREIGN {
+        if kind == OMKind::OMFOREIGN {
             return Self::visit_seq_omforeign(seq).map(Either::Right);
         }
         self.seq_om(seq, kind)
@@ -1339,7 +1419,7 @@ impl<'de, Arr: super::Bytes<'de>, Str: super::StringLike<'de>, OMD: OMDeserializ
     {
         use serde::de::Error;
         let (kind, state) = Self::map_state(&mut map)?;
-        if kind == OpenMathKind::OMFOREIGN {
+        if kind == OMKind::OMFOREIGN {
             macro_rules! ass {
                     ($is:ident != $($id:ident),*) => {{
                         let mut invalid_fields = Vec::new();
@@ -1502,7 +1582,7 @@ where
     Str: super::StringLike<'de>,
     OMD: OMDeserializable<'de, Arr, Str> + 'de,
 {
-    type Value = Vec<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>>;
+    type Value = Vec<Either<OMD, super::OM<'de, OMD, Arr, Str>>>;
     #[inline]
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
@@ -1517,7 +1597,7 @@ where
     Str: super::StringLike<'de>,
     OMD: OMDeserializable<'de, Arr, Str> + 'de,
 {
-    type Value = Vec<Either<OMD, super::OpenMath<'de, OMD, Arr, Str>>>;
+    type Value = Vec<Either<OMD, super::OM<'de, OMD, Arr, Str>>>;
     #[inline]
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("an optional argument list")

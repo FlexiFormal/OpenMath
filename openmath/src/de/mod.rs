@@ -7,7 +7,7 @@
 pub(crate) mod serde_impl;
 use std::borrow::Cow;
 
-use crate::{OpenMathKind, either::Either};
+use crate::{OMKind, either::Either};
 use either::Either::Left;
 #[cfg(feature = "serde")]
 pub use serde_impl::{OMFromSerde, OMFromSerdeOwned};
@@ -58,7 +58,7 @@ to an `i128` directly; like so:
 # #[cfg(feature="serde")]
 # {
 # use std::borrow::Cow;
-use openmath::de::{OMDeserializable, OMFromSerde, OpenMath};
+use openmath::de::{OMDeserializable, OMFromSerde, OM};
 use openmath::either::Either;
 
 #[derive(Copy, Clone, Debug)]
@@ -66,15 +66,15 @@ struct SimplifiedInt(i128);
 impl<'d> OMDeserializable<'d, Cow<'d,[u8]>, &'d str> for SimplifiedInt {
     type Err = String;
     fn from_openmath(
-        om: OpenMath<'d, Self, Cow<'d,[u8]>, &'d str>,
+        om: OM<'d, Self, Cow<'d,[u8]>, &'d str>,
         cd_base:&str
-    ) -> Result<Either<Self, OpenMath<'d, Self, Cow<'d,[u8]>, &'d str>>, Self::Err>
+    ) -> Result<Either<Self, OM<'d, Self, Cow<'d,[u8]>, &'d str>>, Self::Err>
     where
         Self: Sized,
     {
         match om {
             // An integer
-            OpenMath::OMI(i) => {
+            OM::OMI(i) => {
                 // ...which fits in an i128
                 if let Some(i) = i.is_i128() {
                     Ok(Either::Left(Self(i)))
@@ -83,7 +83,7 @@ impl<'d> OMDeserializable<'d, Cow<'d,[u8]>, &'d str> for SimplifiedInt {
                 }
             }
             // Addition or multiplication
-            t @ OpenMath::OMS {
+            t @ OM::OMS {
                 cd_name: "arith1",
                 name: "plus" | "times",
             } if cd_base == openmath::OPENMATH_BASE_URI.as_str() => {
@@ -93,7 +93,7 @@ impl<'d> OMDeserializable<'d, Cow<'d,[u8]>, &'d str> for SimplifiedInt {
                 Ok(either::Right(t))
             }
             // some operator application to two arguments
-            OpenMath::OMA {
+            OM::OMA {
                 // still an open math expression:
                 head: either::Right(op),
                 mut args,
@@ -105,11 +105,11 @@ impl<'d> OMDeserializable<'d, Cow<'d,[u8]>, &'d str> for SimplifiedInt {
                 // Since "plus" and "times" are the only values for
                 // which we return `either::Right`, we know the following matches:
                 let is_times = match *op {
-                    OpenMath::OMS {
+                    OM::OMS {
                         cd_name: "arith1",
                         name: "plus",
                     } => false,
-                    OpenMath::OMS {
+                    OM::OMS {
                         cd_name: "arith1",
                         name: "times",
                     } => false,
@@ -179,9 +179,9 @@ where
     /// See [trait documentation](OMDeserializable)
     #[allow(clippy::type_complexity)]
     fn from_openmath(
-        om: OpenMath<'de, Self, Arr, Str>,
+        om: OM<'de, Self, Arr, Str>,
         cd_base: &str,
-    ) -> Result<Either<Self, OpenMath<'de, Self, Arr, Str>>, Self::Err>
+    ) -> Result<Either<Self, OM<'de, Self, Arr, Str>>, Self::Err>
     where
         Self: Sized;
 }
@@ -211,9 +211,9 @@ pub trait OMDeserializableOwned: std::fmt::Debug {
     /// 3. Encounters an error during processing ([`Err`])
     #[allow(clippy::type_complexity)]
     fn from_openmath<'d>(
-        om: OpenMath<'d, Self, Vec<u8>, String>,
+        om: OM<'d, Self, Vec<u8>, String>,
         cd_base: &str,
-    ) -> Result<Either<Self, OpenMath<'d, Self, Vec<u8>, String>>, Self::Err>
+    ) -> Result<Either<Self, OM<'d, Self, Vec<u8>, String>>, Self::Err>
     where
         Self: Sized;
 }
@@ -227,9 +227,9 @@ impl<'d, O: OMDeserializableOwned> OMDeserializable<'d, Vec<u8>, String> for O {
     type Err = <Self as OMDeserializableOwned>::Err;
     #[inline]
     fn from_openmath(
-        om: OpenMath<'d, Self, Vec<u8>, String>,
+        om: OM<'d, Self, Vec<u8>, String>,
         cd_base: &str,
-    ) -> Result<Either<Self, OpenMath<'d, Self, Vec<u8>, String>>, Self::Err>
+    ) -> Result<Either<Self, OM<'d, Self, Vec<u8>, String>>, Self::Err>
     where
         Self: Sized,
     {
@@ -237,35 +237,26 @@ impl<'d, O: OMDeserializableOwned> OMDeserializable<'d, Vec<u8>, String> for O {
     }
 }
 
-/// Enum representing all possible OpenMath objects.
-///
-/// This enum encompasses the complete OpenMath object model, providing variants
-/// for each type of mathematical object that can be represented in OpenMath.
-///
-/// # Type Parameters
-/// - `'de`: Lifetime of the deserialized data
-/// - `I`: The type that implements [`OMDeserializable`] (your target type)
-/// - `Arr`: Type for byte arrays (default: <code>[Cow]<'b, [u8]></code>)
-/// - `Str`: Type for strings (default: `&'de str`)
-///
-/// # Variants
-///
-/// ## Basic Objects
-/// - [`OMI`](Self::OMI): Arbitrary precision integers
-/// - [`OMF`](Self::OMF): IEEE 754 double precision floating point numbers
-/// - [`OMSTR`](Self::OMSTR): String literals
-/// - [`OMB`](Self::OMB): Binary data (byte arrays)
-/// - [`OMV`](Self::OMV): Variables (identifiers)
-/// - [`OMS`](Self::OMS): Symbols from Content Dictionaries
-///
-/// ## Compound Objects
-/// - [`OMA`](Self::OMA): Applications (function calls)
-/// - [`OMBIND`](Self::OMBIND): Binding constructs (quantifiers, lambda expressions)
-///
-/// see [OMDeserializable] for a complex example
+/// Wrapper to deserialize an OMOBJ
+pub struct OMObject<'de, O: OMDeserializable<'de, Arr, Str>, Arr = Cow<'de, [u8]>, Str = &'de str>(
+    O,
+    std::marker::PhantomData<&'de (Arr, Str)>,
+)
+where
+    Arr: Bytes<'de>,
+    Str: StringLike<'de>;
+impl<'de, O: OMDeserializable<'de>> OMObject<'de, O> {
+    #[inline]
+    pub fn take(self) -> O {
+        self.0
+    }
+}
+
+/// Enum for deserializing from OpenMath. See
+/// see [OMDeserializable] for documentation and an example
 #[derive(Debug, Clone)]
 #[repr(u8)]
-pub enum OpenMath<'de, I, Arr = Cow<'de, [u8]>, Str = &'de str>
+pub enum OM<'de, I, Arr = Cow<'de, [u8]>, Str = &'de str>
 where
     Arr: crate::de::Bytes<'de>,
     Str: crate::de::StringLike<'de>,
@@ -275,22 +266,22 @@ where
     Integers in the mathematical sense, with no predefined range.
     They are “infinite precision” integers (also called “bignums” in computer algebra).
     </div> */
-    OMI(crate::Int<'de>) = OpenMathKind::OMI as _,
+    OMI(crate::Int<'de>) = OMKind::OMI as _,
 
     /** <div class="openmath">
     Double precision floating-point numbers following the IEEE 754-1985 standard.
     </div> */
-    OMF(f64) = OpenMathKind::OMF as _,
+    OMF(f64) = OMKind::OMF as _,
 
     /** <div class="openmath">
     A Unicode Character string. This also corresponds to “characters” in XML.
     </div> */
-    OMSTR(Str) = OpenMathKind::OMSTR as _,
+    OMSTR(Str) = OMKind::OMSTR as _,
 
     /** <div class="openmath">
     A sequence of bytes.
     </div> */
-    OMB(Arr) = OpenMathKind::OMB as _,
+    OMB(Arr) = OMKind::OMB as _,
 
     ///<div class="openmath">
     ///
@@ -300,7 +291,7 @@ where
     ///</div>
     ///
     ///(Note: We do not enforce that names are valid XML names;)
-    OMV(Str) = OpenMathKind::OMV as _,
+    OMV(Str) = OMKind::OMV as _,
 
     ///<div class="openmath">
     ///
@@ -320,7 +311,7 @@ where
     /// [Section 2.1.4](https://openmath.org/standard/om20-2019-07-01/omstd20.html#sec_roles).
     ///
     ///</div>
-    OMS { cd_name: Str, name: Str } = OpenMathKind::OMS as _,
+    OMS { cd_name: Str, name: Str } = OMKind::OMS as _,
 
     /** <div class="openmath">
     If $A_1,...,A_n\;(n>0)$ are OpenMath objects, then
@@ -330,7 +321,7 @@ where
     OMA {
         head: Either<I, Box<Self>>,
         args: Vec<Either<I, Self>>,
-    } = OpenMathKind::OMA as _,
+    } = OMKind::OMA as _,
 
     /** <div class="openmath">
     If $B$ and $C$ are OpenMath objects, and $v_1,...,v_n\;(n\geq0)$
@@ -343,7 +334,7 @@ where
         head: Either<I, Box<Self>>,
         context: Vec<Str>,
         body: Either<I, Box<Self>>,
-    } = OpenMathKind::OMBIND as _,
+    } = OMKind::OMBIND as _,
 
     /** <div class="openmath">
     If $S$ is an OpenMath symbol and $A_1,...,A_n\;(n\geq0)$ are OpenMath objects or
@@ -354,7 +345,7 @@ where
         cd_name: Str,
         name: Str,
         args: Vec<Either<I, OMForeign<'de, I, Arr, Str>>>,
-    } = OpenMathKind::OME as _,
+    } = OMKind::OME as _,
 }
 
 #[derive(Debug, Clone)]
@@ -364,7 +355,7 @@ where
     Str: crate::de::StringLike<'de>,
     I: OMDeserializable<'de, Arr, Str>,
 {
-    OM(OpenMath<'de, I, Arr, Str>),
+    OM(OM<'de, I, Arr, Str>),
 
     /** <div class="openmath">
     If $A$ is not an OpenMath object, then $\mathrm{foreign}(A)$ is an OpenMath foreign object.
@@ -383,7 +374,7 @@ where
 /// data (using `String` and `Vec<u8>` instead of borrowed slices).
 ///
 /// ```
-pub type OMDeserOwned<I> = OpenMath<'static, I, Vec<u8>, String>;
+pub type OMDeserOwned<I> = OM<'static, I, Vec<u8>, String>;
 
 mod hidden {
     use std::borrow::Cow;
@@ -462,13 +453,13 @@ impl Bytes<'_> for Vec<u8> {}
 impl<'d, Arr: Bytes<'d>, Str: StringLike<'d>> OMDeserializable<'d, Arr, Str> for crate::Int<'d> {
     type Err = &'static str;
     fn from_openmath(
-        om: OpenMath<'d, Self, Arr, Str>,
+        om: OM<'d, Self, Arr, Str>,
         _: &str,
-    ) -> Result<Either<Self, OpenMath<'d, Self, Arr, Str>>, Self::Err>
+    ) -> Result<Either<Self, OM<'d, Self, Arr, Str>>, Self::Err>
     where
         Self: Sized,
     {
-        if let OpenMath::OMI(i) = om {
+        if let OM::OMI(i) = om {
             Ok(Left(i))
         } else {
             Err("Not an integer")
@@ -480,13 +471,13 @@ impl<'d, Arr: Bytes<'d>, Str: StringLike<'d>> OMDeserializable<'d, Arr, Str> for
     type Err = &'static str;
     #[allow(clippy::cast_possible_truncation)]
     fn from_openmath(
-        om: OpenMath<'d, Self, Arr, Str>,
+        om: OM<'d, Self, Arr, Str>,
         _: &str,
-    ) -> Result<Either<Self, OpenMath<'d, Self, Arr, Str>>, Self::Err>
+    ) -> Result<Either<Self, OM<'d, Self, Arr, Str>>, Self::Err>
     where
         Self: Sized,
     {
-        if let OpenMath::OMF(f) = om {
+        if let OM::OMF(f) = om {
             Ok(Left(f as _))
         } else {
             Err("Not a float")
@@ -497,13 +488,13 @@ impl<'d, Arr: Bytes<'d>, Str: StringLike<'d>> OMDeserializable<'d, Arr, Str> for
 impl<'d, Arr: Bytes<'d>, Str: StringLike<'d>> OMDeserializable<'d, Arr, Str> for f64 {
     type Err = &'static str;
     fn from_openmath(
-        om: OpenMath<'d, Self, Arr, Str>,
+        om: OM<'d, Self, Arr, Str>,
         _: &str,
-    ) -> Result<Either<Self, OpenMath<'d, Self, Arr, Str>>, Self::Err>
+    ) -> Result<Either<Self, OM<'d, Self, Arr, Str>>, Self::Err>
     where
         Self: Sized,
     {
-        if let OpenMath::OMF(f) = om {
+        if let OM::OMF(f) = om {
             Ok(Left(f))
         } else {
             Err("Not a float")
@@ -514,13 +505,13 @@ impl<'d, Arr: Bytes<'d>, Str: StringLike<'d>> OMDeserializable<'d, Arr, Str> for
 impl<'d, Arr: Bytes<'d>> OMDeserializable<'d, Arr, &'d str> for &'d str {
     type Err = &'static str;
     fn from_openmath(
-        om: OpenMath<'d, Self, Arr, &'d str>,
+        om: OM<'d, Self, Arr, &'d str>,
         _: &str,
-    ) -> Result<Either<Self, OpenMath<'d, Self, Arr, &'d str>>, Self::Err>
+    ) -> Result<Either<Self, OM<'d, Self, Arr, &'d str>>, Self::Err>
     where
         Self: Sized,
     {
-        if let OpenMath::OMSTR(s) = om {
+        if let OM::OMSTR(s) = om {
             Ok(Left(s))
         } else {
             Err("Not an OMSTR")
@@ -531,13 +522,13 @@ impl<'d, Arr: Bytes<'d>> OMDeserializable<'d, Arr, &'d str> for &'d str {
 impl<'d, Arr: Bytes<'d>> OMDeserializable<'d, Arr, Self> for String {
     type Err = &'static str;
     fn from_openmath(
-        om: OpenMath<'d, Self, Arr, Self>,
+        om: OM<'d, Self, Arr, Self>,
         _: &str,
-    ) -> Result<Either<Self, OpenMath<'d, Self, Arr, Self>>, Self::Err>
+    ) -> Result<Either<Self, OM<'d, Self, Arr, Self>>, Self::Err>
     where
         Self: Sized,
     {
-        if let OpenMath::OMSTR(s) = om {
+        if let OM::OMSTR(s) = om {
             Ok(Left(s))
         } else {
             Err("Not an OMSTR")
@@ -548,13 +539,13 @@ impl<'d, Arr: Bytes<'d>> OMDeserializable<'d, Arr, Self> for String {
 impl<'d, Arr: Bytes<'d>, Str: StringLike<'d>> OMDeserializable<'d, Arr, Str> for Arr {
     type Err = &'static str;
     fn from_openmath(
-        om: OpenMath<'d, Self, Arr, Str>,
+        om: OM<'d, Self, Arr, Str>,
         _: &str,
-    ) -> Result<Either<Self, OpenMath<'d, Self, Arr, Str>>, Self::Err>
+    ) -> Result<Either<Self, OM<'d, Self, Arr, Str>>, Self::Err>
     where
         Self: Sized,
     {
-        if let OpenMath::OMB(b) = om {
+        if let OM::OMB(b) = om {
             Ok(Left(b))
         } else {
             Err("Not an OMB")
@@ -569,13 +560,13 @@ macro_rules! impl_int_deserializable {
             impl<'d, Arr: Bytes<'d>, Str: StringLike<'d>> OMDeserializable<'d, Arr, Str> for $t {
                 type Err = &'static str;
                 fn from_openmath(
-                    om: OpenMath<'d, Self, Arr, Str>,
+                    om: OM<'d, Self, Arr, Str>,
                     _: &str,
-                ) -> Result<Either<Self, OpenMath<'d, Self, Arr, Str>>, Self::Err>
+                ) -> Result<Either<Self, OM<'d, Self, Arr, Str>>, Self::Err>
                 where
                     Self: Sized,
                 {
-                    if let OpenMath::OMI(i) = om {
+                    if let OM::OMI(i) = om {
                         i.is_i128().map_or(Err($err), |i| {
                             i.try_into().map(Left).map_err(|_| $err)
                         })
@@ -609,22 +600,22 @@ mod tests {
         type Err = String;
 
         fn from_openmath(
-            om: OpenMath<'de, Self>,
+            om: OM<'de, Self>,
             _: &str,
-        ) -> Result<Either<Self, OpenMath<'de, Self>>, Self::Err> {
+        ) -> Result<Either<Self, OM<'de, Self>>, Self::Err> {
             match om {
-                OpenMath::OMI(int_val) => {
+                OM::OMI(int_val) => {
                     if let Some(i) = int_val.is_i128() {
                         if i >= i64::MIN.into() && i <= i64::MAX.into() {
                             #[allow(clippy::cast_possible_truncation)]
                             Ok(Either::Left(Self(i as i64)))
                         } else {
                             // Return the original value instead of error for too large integers
-                            Ok(Either::Right(OpenMath::OMI(int_val)))
+                            Ok(Either::Right(OM::OMI(int_val)))
                         }
                     } else {
                         // Big integer - can't fit in i64
-                        Ok(Either::Right(OpenMath::OMI(int_val)))
+                        Ok(Either::Right(OM::OMI(int_val)))
                     }
                 }
                 other => Ok(Either::Right(other)),
@@ -639,12 +630,12 @@ mod tests {
         type Err = String;
 
         fn from_openmath(
-            om: OpenMath<'de, Self>,
+            om: OM<'de, Self>,
             _: &str,
-        ) -> Result<Either<Self, OpenMath<'de, Self>>, Self::Err> {
+        ) -> Result<Either<Self, OM<'de, Self>>, Self::Err> {
             match om {
-                OpenMath::OMF(f) if f.is_finite() => Ok(Either::Left(Self(f))),
-                OpenMath::OMF(f) => Err(format!("Non-finite float: {f}")),
+                OM::OMF(f) if f.is_finite() => Ok(Either::Left(Self(f))),
+                OM::OMF(f) => Err(format!("Non-finite float: {f}")),
                 other => Ok(Either::Right(other)),
             }
         }
@@ -657,11 +648,11 @@ mod tests {
         type Err = String;
 
         fn from_openmath(
-            om: OpenMath<'de, Self>,
+            om: OM<'de, Self>,
             _: &str,
-        ) -> Result<Either<Self, OpenMath<'de, Self>>, Self::Err> {
+        ) -> Result<Either<Self, OM<'de, Self>>, Self::Err> {
             match om {
-                OpenMath::OMSTR(s) => Ok(Either::Left(Self(s.to_string()))),
+                OM::OMSTR(s) => Ok(Either::Left(Self(s.to_string()))),
                 other => Ok(Either::Right(other)),
             }
         }
@@ -674,11 +665,11 @@ mod tests {
         type Err = String;
 
         fn from_openmath(
-            om: OpenMath<'de, Self>,
+            om: OM<'de, Self>,
             _: &str,
-        ) -> Result<Either<Self, OpenMath<'de, Self>>, Self::Err> {
+        ) -> Result<Either<Self, OM<'de, Self>>, Self::Err> {
             match om {
-                OpenMath::OMV(name) => Ok(Either::Left(Self(name.to_string()))),
+                OM::OMV(name) => Ok(Either::Left(Self(name.to_string()))),
                 other => Ok(Either::Right(other)),
             }
         }
@@ -695,11 +686,11 @@ mod tests {
         type Err = String;
 
         fn from_openmath(
-            om: OpenMath<'de, Self>,
+            om: OM<'de, Self>,
             cd_base: &str,
-        ) -> Result<Either<Self, OpenMath<'de, Self>>, Self::Err> {
+        ) -> Result<Either<Self, OM<'de, Self>>, Self::Err> {
             match om {
-                OpenMath::OMS { cd_name: cd, name } => Ok(Either::Left(Self {
+                OM::OMS { cd_name: cd, name } => Ok(Either::Left(Self {
                     cd_base: cd_base.to_string(),
                     cd: cd.to_string(),
                     name: name.to_string(),
@@ -717,11 +708,11 @@ mod tests {
         type Err = String;
 
         fn from_openmath<'d>(
-            om: OpenMath<'d, Self, Vec<u8>, String>,
+            om: OM<'d, Self, Vec<u8>, String>,
             _: &str,
-        ) -> Result<Either<Self, OpenMath<'d, Self, Vec<u8>, String>>, Self::Err> {
+        ) -> Result<Either<Self, OM<'d, Self, Vec<u8>, String>>, Self::Err> {
             match om {
-                OpenMath::OMSTR(s) => Ok(Either::Left(Self(s))),
+                OM::OMSTR(s) => Ok(Either::Left(Self(s))),
                 other => Ok(Either::Right(other)),
             }
         }
@@ -730,7 +721,7 @@ mod tests {
     #[test]
     fn test_omi_deserialization_success() {
         let int_val = Int::from(42);
-        let om = OpenMath::<TestInt>::OMI(int_val);
+        let om = OM::<TestInt>::OMI(int_val);
 
         let result = TestInt::from_openmath(om, crate::OPENMATH_BASE_URI.as_str())
             .expect("should be defined");
@@ -743,13 +734,13 @@ mod tests {
     #[test]
     fn test_omi_deserialization_too_large() {
         let big_int = Int::new("123456789012345678901234567890").expect("should be defined");
-        let om: OpenMath<TestInt> = OpenMath::OMI(big_int.clone());
+        let om: OM<TestInt> = OM::OMI(big_int.clone());
 
         let result = TestInt::from_openmath(om, crate::OPENMATH_BASE_URI.as_str())
             .expect("should be defined");
         match result {
             Either::Left(_) => panic!("Expected deserialization to fail"),
-            Either::Right(OpenMath::OMI(returned_int)) => {
+            Either::Right(OM::OMI(returned_int)) => {
                 assert_eq!(returned_int.is_big(), big_int.is_big());
             }
             Either::Right(_) => panic!("Expected OMI to be returned"),
@@ -759,13 +750,13 @@ mod tests {
     #[test]
     fn test_omi_deserialization_i128_max() {
         let int_val = Int::from(i128::MAX);
-        let om: OpenMath<TestInt> = OpenMath::OMI(int_val.clone());
+        let om: OM<TestInt> = OM::OMI(int_val.clone());
 
         let result = TestInt::from_openmath(om, crate::OPENMATH_BASE_URI.as_str())
             .expect("should be defined");
         match result {
             Either::Left(_) => panic!("Expected deserialization to fail for i128::MAX"),
-            Either::Right(OpenMath::OMI(returned_int)) => {
+            Either::Right(OM::OMI(returned_int)) => {
                 assert_eq!(returned_int.is_i128(), int_val.is_i128());
             }
             Either::Right(_) => panic!("Expected OMI to be returned"),
@@ -775,7 +766,7 @@ mod tests {
     #[test]
     #[allow(clippy::approx_constant)]
     fn test_omf_deserialization_success() {
-        let om = OpenMath::<TestFloat>::OMF(3.14159);
+        let om = OM::<TestFloat>::OMF(3.14159);
 
         let result = TestFloat::from_openmath(om, crate::OPENMATH_BASE_URI.as_str())
             .expect("should be defined");
@@ -787,7 +778,7 @@ mod tests {
 
     #[test]
     fn test_omf_deserialization_infinity() {
-        let om = OpenMath::<TestFloat>::OMF(f64::INFINITY);
+        let om = OM::<TestFloat>::OMF(f64::INFINITY);
 
         let result = TestFloat::from_openmath(om, crate::OPENMATH_BASE_URI.as_str());
         match result {
@@ -798,7 +789,7 @@ mod tests {
 
     #[test]
     fn test_omstr_deserialization() {
-        let om = OpenMath::<TestString>::OMSTR("hello world");
+        let om = OM::<TestString>::OMSTR("hello world");
 
         let result = TestString::from_openmath(om, crate::OPENMATH_BASE_URI.as_str())
             .expect("should be defined");
@@ -812,7 +803,7 @@ mod tests {
 
     #[test]
     fn test_omv_deserialization() {
-        let om = OpenMath::<TestVariable>::OMV("x");
+        let om = OM::<TestVariable>::OMV("x");
 
         let result = TestVariable::from_openmath(om, crate::OPENMATH_BASE_URI.as_str())
             .expect("should be defined");
@@ -824,7 +815,7 @@ mod tests {
 
     #[test]
     fn test_oms_deserialization() {
-        let om: OpenMath<TestSymbol> = OpenMath::OMS {
+        let om: OM<TestSymbol> = OM::OMS {
             cd_name: "arith1",
             name: "plus",
         };
@@ -849,20 +840,20 @@ mod tests {
     #[allow(clippy::float_cmp)]
     fn test_wrong_type_deserialization() {
         // Try to deserialize a float as an integer
-        let om = OpenMath::<TestInt>::OMF(3.14);
+        let om = OM::<TestInt>::OMF(3.14);
 
         let result = TestInt::from_openmath(om, crate::OPENMATH_BASE_URI.as_str())
             .expect("should be defined");
         match result {
             Either::Left(_) => panic!("Expected deserialization to fail"),
-            Either::Right(OpenMath::OMF(f)) => assert_eq!(f, 3.14f64),
+            Either::Right(OM::OMF(f)) => assert_eq!(f, 3.14f64),
             Either::Right(_) => panic!("Expected OMF to be returned"),
         }
     }
 
     #[test]
     fn test_owned_deserialization() {
-        let om = OpenMath::<OwnedTestString, Vec<u8>, String>::OMSTR("owned string".to_string());
+        let om = OM::<OwnedTestString, Vec<u8>, String>::OMSTR("owned string".to_string());
 
         let result = <OwnedTestString as OMDeserializableOwned>::from_openmath(
             om,
@@ -880,7 +871,7 @@ mod tests {
     #[test]
     fn test_blanket_impl_for_owned() {
         // Test that OMDeserializableOwned types work with the borrowed trait
-        let om: OpenMath<OwnedTestString, Vec<u8>, String> = OpenMath::OMSTR("test".to_string());
+        let om: OM<OwnedTestString, Vec<u8>, String> = OM::OMSTR("test".to_string());
 
         // This should work due to the blanket impl
         let result = <OwnedTestString as OMDeserializableOwned>::from_openmath(

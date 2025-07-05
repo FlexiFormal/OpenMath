@@ -23,7 +23,6 @@ OpenMath is a standard for representing mathematical expressions in a machine-re
 
 - attributions via OMATTR (ser/de)
 - structure sharing via OMR
-- OMObject wrapper (ser/de)
 - binary, xml
 
 [1]: https://openmath.org/standard/om20-2019-07-01/omstd20.html
