@@ -1,13 +1,13 @@
 /*! OpenMath Deserialization; [OMDeserializable] and related types
 */
 
-#[cfg(feature = "serde")]
-pub(crate) mod serde_aux;
+//#[cfg(feature = "serde")]
+//pub(crate) mod serde_aux;
 #[cfg(feature = "serde")]
 pub(crate) mod serde_impl;
 use std::borrow::Cow;
 
-use crate::either::Either;
+use crate::{OpenMathKind, either::Either};
 use either::Either::Left;
 #[cfg(feature = "serde")]
 pub use serde_impl::{OMFromSerde, OMFromSerdeOwned};
@@ -263,58 +263,117 @@ impl<'d, O: OMDeserializableOwned> OMDeserializable<'d, Vec<u8>, String> for O {
 /// - [`OMBIND`](Self::OMBIND): Binding constructs (quantifiers, lambda expressions)
 ///
 /// see [OMDeserializable] for a complex example
-#[derive(Debug, Clone, strum::EnumDiscriminants)]
-#[strum_discriminants(vis(pub))]
-#[strum_discriminants(name(OpenMathKind))]
-#[strum_discriminants(derive(strum::VariantNames))]
-#[cfg_attr(feature = "serde", strum_discriminants(derive(serde::Deserialize)))]
+#[derive(Debug, Clone)]
+#[repr(u8)]
 pub enum OpenMath<'de, I, Arr = Cow<'de, [u8]>, Str = &'de str>
 where
     Arr: crate::de::Bytes<'de>,
     Str: crate::de::StringLike<'de>,
     I: OMDeserializable<'de, Arr, Str>,
 {
-    /// OpenMath integer (arbitrary precision)
-    OMI(crate::Int<'de>),
+    /** <div class="openmath">
+    Integers in the mathematical sense, with no predefined range.
+    They are “infinite precision” integers (also called “bignums” in computer algebra).
+    </div> */
+    OMI(crate::Int<'de>) = OpenMathKind::OMI as _,
 
-    /// OpenMath floating point number (IEEE 754 double precision)
-    OMF(f64),
+    /** <div class="openmath">
+    Double precision floating-point numbers following the IEEE 754-1985 standard.
+    </div> */
+    OMF(f64) = OpenMathKind::OMF as _,
 
-    /// OpenMath string literal
-    OMSTR(Str),
+    /** <div class="openmath">
+    A Unicode Character string. This also corresponds to “characters” in XML.
+    </div> */
+    OMSTR(Str) = OpenMathKind::OMSTR as _,
 
-    /// OpenMath byte array (binary data)
-    OMB(Arr),
+    /** <div class="openmath">
+    A sequence of bytes.
+    </div> */
+    OMB(Arr) = OpenMathKind::OMB as _,
 
-    /// OpenMath variable (identifier)
-    OMV(Str),
-
-    /// OpenMath symbol from a Content Dictionary
+    ///<div class="openmath">
     ///
-    /// - `cd_name`: Content Dictionary name
-    /// - `name`: Symbol name within the CD
-    OMS { cd_name: Str, name: Str },
-
-    /// OpenMath application (function call)
+    /// A Variable must have a name which is a sequence of characters matching a regular
+    /// expression, as described in [Section 2.3](https://openmath.org/standard/om20-2019-07-01/omstd20.html#sec_names).
     ///
-    /// Represents `head(arg1, arg2, ..., argN)` where:
-    /// - `head`: The function being applied (either a deserialized value or nested OpenMath)
-    /// - `args`: List of arguments (each either deserialized or raw OpenMath)
+    ///</div>
+    ///
+    ///(Note: We do not enforce that names are valid XML names;)
+    OMV(Str) = OpenMathKind::OMV as _,
+
+    ///<div class="openmath">
+    ///
+    /// A Symbol encodes three fields of information, a symbol name, a Content Dictionary name,
+    /// and (optionally) a Content Dictionary base URI, The name of a symbol is a sequence of
+    /// characters matching the regular expression described in
+    /// [Section 2.3](https://openmath.org/standard/om20-2019-07-01/omstd20.html#sec_names).
+    /// The Content Dictionary is the location of the definition of the symbol, consisting of a
+    /// name (a sequence of characters matching the regular expression described in
+    /// [Section 2.3](https://openmath.org/standard/om20-2019-07-01/omstd20.html#sec_names))
+    /// and, optionally, a unique prefix called a cdbase which is used to disambiguate multiple
+    /// Content Dictionaries of the same name. There are other properties of the symbol that are
+    /// not explicit in these fields but whose values may be obtained by inspecting the Content
+    /// Dictionary specified. These include the symbol definition, formal properties and examples
+    /// and, optionally, a role which is a restriction on where the symbol may appear in an
+    /// OpenMath object. The possible roles are described in
+    /// [Section 2.1.4](https://openmath.org/standard/om20-2019-07-01/omstd20.html#sec_roles).
+    ///
+    ///</div>
+    OMS { cd_name: Str, name: Str } = OpenMathKind::OMS as _,
+
+    /** <div class="openmath">
+    If $A_1,...,A_n\;(n>0)$ are OpenMath objects, then
+    $\mathrm{application}(A_1,...,A_n)$ is an OpenMath application object.
+    We call $A_1$ the function and $A_2$ to $A_n$ the arguments.
+    </div> */
     OMA {
         head: Either<I, Box<Self>>,
         args: Vec<Either<I, Self>>,
-    },
+    } = OpenMathKind::OMA as _,
 
-    /// OpenMath binding construct
-    ///
-    /// Represents constructs that bind variables like quantifiers, lambda expressions, etc.
-    /// - `head`: The binding operator (∀, ∃, λ, etc.)
-    /// - `context`: List of variable names being bound
-    /// - `body`: The expression in which variables are bound
+    /** <div class="openmath">
+    If $B$ and $C$ are OpenMath objects, and $v_1,...,v_n\;(n\geq0)$
+    are OpenMath variables or attributed variables, then
+    $\mathrm{binding}(B,v_1,...,v_n,C)$ is an OpenMath binding object.
+    $B$ is called the binder, $v_1,...,v_n$ are called variable bindings, and
+    $C$ is called the body of the binding object above.
+    </div> */
     OMBIND {
         head: Either<I, Box<Self>>,
         context: Vec<Str>,
         body: Either<I, Box<Self>>,
+    } = OpenMathKind::OMBIND as _,
+
+    /** <div class="openmath">
+    If $S$ is an OpenMath symbol and $A_1,...,A_n\;(n\geq0)$ are OpenMath objects or
+    derived OpenMath objects, then $\mathrm{error}(S,A_1,...,A_n)$ is an OpenMath error object.
+    </div> */
+    OME {
+        cd_base: Option<Str>,
+        cd_name: Str,
+        name: Str,
+        args: Vec<Either<I, OMForeign<'de, I, Arr, Str>>>,
+    } = OpenMathKind::OME as _,
+}
+
+#[derive(Debug, Clone)]
+pub enum OMForeign<'de, I, Arr = Cow<'de, [u8]>, Str = &'de str>
+where
+    Arr: crate::de::Bytes<'de>,
+    Str: crate::de::StringLike<'de>,
+    I: OMDeserializable<'de, Arr, Str>,
+{
+    OM(OpenMath<'de, I, Arr, Str>),
+
+    /** <div class="openmath">
+    If $A$ is not an OpenMath object, then $\mathrm{foreign}(A)$ is an OpenMath foreign object.
+    An OpenMath foreign object may optionally have an encoding field which describes how its
+    contents should be interpreted.
+    </div> */
+    Foreign {
+        encoding: Option<Str>,
+        value: Str,
     },
 }
 

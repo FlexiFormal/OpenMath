@@ -12,13 +12,6 @@ OpenMath is a standard for representing mathematical expressions in a machine-re
 - [`OMDeserializable`] trait for parsing <span style="font-variant:small-caps;">OpenMath</span> into Rust types
 - Built-in support for serde-based formats (JSON, XML, etc.)
 
-## Quick Start
-
-```rust
-use openmath::{OMSerializable, Int};
-
-// TODO
-```
 
 ## Features
 
@@ -30,7 +23,6 @@ use openmath::{OMSerializable, Int};
 
 - attributions via OMATTR (ser/de)
 - structure sharing via OMR
-- omforeign, ome
 - OMObject wrapper (ser/de)
 - binary, xml
 

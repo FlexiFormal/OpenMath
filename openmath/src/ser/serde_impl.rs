@@ -16,7 +16,10 @@
 //! println!("{}", json); // Outputs OpenMath JSON representation
 //! # }
 //! ```
-use crate::{OMSerializable, ser::OMSerializer};
+use crate::{
+    OMSerializable,
+    ser::{OMForeignSerializable, OMSerializer},
+};
 use serde::{
     Serializer,
     ser::{SerializeSeq, SerializeStruct},
@@ -55,6 +58,42 @@ pub struct SerdeSerializer<'s, OM>(
 )
 where
     OM: crate::OMSerializable + ?Sized;
+
+pub enum ForeignSerializer<'s, OM, D: std::fmt::Display>
+where
+    OM: crate::OMSerializable + ?Sized,
+{
+    O(SerdeSerializer<'s, OM>),
+    F {
+        encoding: Option<&'s str>,
+        value: &'s D,
+    },
+}
+impl<OM: crate::OMSerializable + ?Sized, D: std::fmt::Display> ::serde::Serialize
+    for ForeignSerializer<'_, OM, D>
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::O(o) => o.serialize(serializer),
+            Self::F { encoding, value } => {
+                let mut struc = serializer
+                    .serialize_struct("OMObject", if encoding.is_some() { 3 } else { 2 })?;
+                struc.serialize_field("kind", &crate::OpenMathKind::OMFOREIGN)?;
+                struc.skip_field("id")?;
+                struc.serialize_field("foreign", &DWrap(value))?;
+                if let Some(e) = encoding {
+                    struc.serialize_field("encoding", e)?;
+                } else {
+                    struc.skip_field("encoding")?;
+                }
+                struc.end()
+            }
+        }
+    }
+}
 
 impl<OM: crate::OMSerializable + ?Sized> ::serde::Serialize for SerdeSerializer<'_, OM> {
     #[inline]
@@ -113,7 +152,8 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
 
     fn omi(self, value: &crate::Int) -> Result<Self::Ok, Self::Err> {
         let mut struc = self.s.serialize_struct("OMObject", 2)?;
-        struc.serialize_field("kind", "OMI")?;
+        struc.serialize_field("kind", &crate::OpenMathKind::OMI)?;
+        struc.skip_field("id")?;
         if let Some(i) = value.is_i128() {
             struc.serialize_field("integer", &i)?;
         } else {
@@ -124,14 +164,16 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
 
     fn omf(self, value: f64) -> Result<Self::Ok, Self::Err> {
         let mut struc = self.s.serialize_struct("OMObject", 2)?;
-        struc.serialize_field("kind", "OMF")?;
+        struc.serialize_field("kind", &crate::OpenMathKind::OMF)?;
+        struc.skip_field("id")?;
         struc.serialize_field("float", &value)?;
         struc.end()
     }
 
     fn omstr(self, string: &impl std::fmt::Display) -> Result<Self::Ok, Self::Err> {
         let mut struc = self.s.serialize_struct("OMObject", 2)?;
-        struc.serialize_field("kind", "OMSTR")?;
+        struc.serialize_field("kind", &crate::OpenMathKind::OMSTR)?;
+        struc.skip_field("id")?;
         struc.serialize_field("string", &DWrap(string))?;
         struc.end()
     }
@@ -142,7 +184,8 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
     {
         use crate::base64::Base64Encodable;
         let mut struc = self.s.serialize_struct("OMObject", 2)?;
-        struc.serialize_field("kind", "OMB")?;
+        struc.serialize_field("kind", &crate::OpenMathKind::OMB)?;
+        struc.skip_field("id")?;
         let s = bytes.into_iter().base64().into_string();
         struc.serialize_field("base64", &s)?;
         struc.end()
@@ -150,7 +193,8 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
 
     fn omv(self, name: &impl std::fmt::Display) -> Result<Self::Ok, Self::Err> {
         let mut struc = self.s.serialize_struct("OMObject", 2)?;
-        struc.serialize_field("kind", "OMV")?;
+        struc.serialize_field("kind", &crate::OpenMathKind::OMV)?;
+        struc.skip_field("id")?;
         struc.serialize_field("name", &DWrap(name))?;
         struc.end()
     }
@@ -162,12 +206,72 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
     ) -> Result<Self::Ok, Self::Err> {
         let num_fields = if self.next_ns.is_some() { 4 } else { 3 };
         let mut struc = self.s.serialize_struct("OMObject", num_fields)?;
-        struc.serialize_field("kind", "OMS")?;
+        struc.serialize_field("kind", &crate::OpenMathKind::OMS)?;
+        struc.skip_field("id")?;
         if let Some(ns) = self.next_ns {
             struc.serialize_field("cdbase", ns)?;
+        } else {
+            struc.skip_field("cdbase")?;
         }
         struc.serialize_field("cd", &DWrap(cd_name))?;
         struc.serialize_field("name", &DWrap(name))?;
+        struc.end()
+    }
+
+    fn ome<
+        'a,
+        T: OMSerializable + 'a,
+        D: std::fmt::Display + 'a,
+        I: IntoIterator<Item = super::OMForeignSerializable<'a, T, D>>,
+    >(
+        mut self,
+        cd_name: &impl std::fmt::Display,
+        name: &impl std::fmt::Display,
+        args: I,
+    ) -> Result<Self::Ok, Self::Err>
+    where
+        I::IntoIter: ExactSizeIterator,
+    {
+        let args = args.into_iter();
+        let mut num_fields = 2;
+        if args.len() > 0 {
+            num_fields += 1;
+        }
+        if self.next_ns.is_some() {
+            num_fields += 1;
+        }
+
+        let mut struc = self.s.serialize_struct("OMObject", num_fields)?;
+        struc.serialize_field("kind", &crate::OpenMathKind::OME)?;
+        struc.skip_field("id")?;
+        if let Some(ns) = self.next_ns.take() {
+            self.current_ns = ns;
+            struc.serialize_field("cdbase", ns)?;
+        } else {
+            struc.skip_field("cdbase")?;
+        }
+
+        let uri = super::Uri {
+            cd_base: self.current_ns,
+            cd: cd_name,
+            name,
+        };
+        struc.serialize_field("error", &uri.openmath_serde())?;
+        if args.len() > 0 {
+            struc.serialize_field(
+                "arguments",
+                &Iter(std::cell::Cell::new(Some(args.map(|e| match e {
+                    OMForeignSerializable::OM(e) => {
+                        ForeignSerializer::O(SerdeSerializer(e, None, self.current_ns))
+                    }
+                    OMForeignSerializable::Foreign { encoding, value } => {
+                        ForeignSerializer::F { encoding, value }
+                    }
+                })))),
+            )?;
+        } else {
+            struc.skip_field("arguments")?;
+        }
         struc.end()
     }
 
@@ -188,10 +292,13 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
             num_fields += 1;
         }
         let mut struc = self.s.serialize_struct("OMObject", num_fields)?;
-        struc.serialize_field("kind", "OMA")?;
+        struc.serialize_field("kind", &crate::OpenMathKind::OMA)?;
+        struc.skip_field("id")?;
         if let Some(ns) = self.next_ns.take() {
             self.current_ns = ns;
             struc.serialize_field("cdbase", ns)?;
+        } else {
+            struc.skip_field("cdbase")?;
         }
         struc.serialize_field("applicant", &SerdeSerializer(head, None, self.current_ns))?;
         if args.len() != 0 {
@@ -201,6 +308,8 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
                     args.map(|e| SerdeSerializer(e, None, self.current_ns)),
                 ))),
             )?;
+        } else {
+            struc.skip_field("arguments")?;
         }
         struc.end()
     }
@@ -220,10 +329,13 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
             num_fields += 1;
         }
         let mut struc = self.s.serialize_struct("OMObject", num_fields)?;
-        struc.serialize_field("kind", "OMBIND")?;
+        struc.serialize_field("kind", &crate::OpenMathKind::OMBIND)?;
+        struc.skip_field("id")?;
         if let Some(ns) = self.next_ns.take() {
             self.current_ns = ns;
             struc.serialize_field("cdbase", ns)?;
+        } else {
+            struc.skip_field("cdbase")?;
         }
         struc.serialize_field("binder", &SerdeSerializer(head, None, self.current_ns))?;
         struc.serialize_field(

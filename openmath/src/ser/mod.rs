@@ -198,6 +198,23 @@ pub trait OMSerializable {
     }
 }
 
+impl<A: OMSerializable, B: OMSerializable> OMSerializable for either::Either<A, B> {
+    #[inline]
+    fn as_openmath<'s, S: OMSerializer<'s>>(&self, serializer: S) -> Result<S::Ok, S::Err> {
+        match self {
+            Self::Left(a) => a.as_openmath(serializer),
+            Self::Right(a) => a.as_openmath(serializer),
+        }
+    }
+}
+pub enum OMForeignSerializable<'f, OM: OMSerializable = String, F: std::fmt::Display = String> {
+    OM(&'f OM),
+    Foreign {
+        encoding: Option<&'f str>,
+        value: &'f F,
+    },
+}
+
 /// Blanket implementation for references to serializable types.
 ///
 /// This allows `&T` to be serializable whenever `T` is serializable,
@@ -396,7 +413,6 @@ pub trait OMSerializer<'s>: Sized {
     */
     fn oms(
         self,
-        //cd_base: &impl std::fmt::Display,
         cd_name: &impl std::fmt::Display,
         name: &impl std::fmt::Display,
     ) -> Result<Self::Ok, Self::Err>;
@@ -435,6 +451,28 @@ pub trait OMSerializer<'s>: Sized {
     fn oma<'a, T: OMSerializable + 'a, I: IntoIterator<Item = &'a T>>(
         self,
         head: &'a impl OMSerializable,
+        args: I,
+    ) -> Result<Self::Ok, Self::Err>
+    where
+        I::IntoIter: ExactSizeIterator;
+
+    /** Serialize an OpenMath error (OME).
+
+    `name` and `cd_name` are those of the URI of the error symbol.
+
+    # Errors
+    If either the [OMSerializer] erorrs, or this object can't be serialized
+    after all (call [`Error::custom`] to return custom error messages).
+    */
+    fn ome<
+        'a,
+        T: OMSerializable + 'a,
+        D: std::fmt::Display + 'a,
+        I: IntoIterator<Item = OMForeignSerializable<'a, T, D>>,
+    >(
+        self,
+        cd_name: &impl std::fmt::Display,
+        name: &impl std::fmt::Display,
         args: I,
     ) -> Result<Self::Ok, Self::Err>
     where
@@ -679,6 +717,19 @@ impl DisplaySerializer<'_, '_> {
         };
         o.as_openmath(s)
     }
+    fn foreign<O: OMSerializable, D: std::fmt::Display>(
+        &mut self,
+        o: &OMForeignSerializable<'_, O, D>,
+    ) -> Result<(), DisplayErr> {
+        match o {
+            OMForeignSerializable::OM(o) => self.rec(o),
+            OMForeignSerializable::Foreign {
+                encoding: Some(enc),
+                value,
+            } => Ok(write!(self.f, "OMF(encoding:{enc},{value})")?),
+            OMForeignSerializable::Foreign { value, .. } => Ok(write!(self.f, "OMF({value})")?),
+        }
+    }
 }
 impl<'f1, 'f2> OMSerializer<'f1> for DisplaySerializer<'f1, 'f2> {
     type Err = DisplayErr;
@@ -776,6 +827,34 @@ impl<'f1, 'f2> OMSerializer<'f1> for DisplaySerializer<'f1, 'f2> {
         }
         self.f.write_char(')').map_err(Into::into)
     }
+
+    fn ome<
+        'a,
+        T: OMSerializable + 'a,
+        D: std::fmt::Display + 'a,
+        I: IntoIterator<Item = OMForeignSerializable<'a, T, D>>,
+    >(
+        mut self,
+        cd_name: &impl std::fmt::Display,
+        name: &impl std::fmt::Display,
+        args: I,
+    ) -> Result<Self::Ok, Self::Err>
+    where
+        I::IntoIter: ExactSizeIterator,
+    {
+        let (s, t) = self.next_ns.map_or(("", ""), |s| (s, "/"));
+        let mut args = args.into_iter();
+        write!(self.f, "OME{s}{t}{cd_name}#{name}(")?;
+        if let Some(next) = args.next() {
+            self.foreign(&next)?;
+            for a in args {
+                self.f.write_char(',')?;
+                self.foreign(&a)?;
+            }
+        }
+        self.f.write_char(')').map_err(Into::into)
+    }
+
     fn ombind<'s, St: std::fmt::Display + 's, I: IntoIterator<Item = &'s St>>(
         mut self,
         head: &'s impl OMSerializable,

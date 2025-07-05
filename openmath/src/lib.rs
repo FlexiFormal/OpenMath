@@ -9,7 +9,7 @@ use std::borrow::Cow;
 
 pub use ser::OMSerializable;
 pub mod de;
-pub use de::OMDeserializable;
+pub use de::{OMDeserializable, OpenMath};
 pub mod base64;
 mod int;
 /// reexported for convenience
@@ -93,7 +93,11 @@ where
     and, optionally, a role which is a restriction on where the symbol may appear in an
     OpenMath object. The possible roles are described in Section 2.1.4.
     </div> */
-    OMS { cd: Str, name: Str } = OpenMathKind::OMS as _,
+    OMS {
+        cd: Str,
+        name: Str,
+        cd_base: Option<Str>,
+    } = OpenMathKind::OMS as _,
 
     /** <div class="openmath">
     If $A_1,...,A_n\;(n>0)$ are OpenMath objects, then
@@ -101,6 +105,17 @@ where
     We call $A_1$ the function and $A_2$ to $A_n$ the arguments.
     </div> */
     OMA { applicant: Rec, arguments: Vec<Arg> } = OpenMathKind::OMA as _,
+
+    /** <div class="openmath">
+    If $S$ is an OpenMath symbol and $A_1,...,A_n\;(n\geq0)$ are OpenMath objects or
+    derived OpenMath objects, then $\mathrm{error}(S,A_1,...,A_n)$ is an OpenMath error object.
+    </div> */
+    OME {
+        cd: Str,
+        name: Str,
+        cd_base: Option<Str>,
+        arguments: Vec<OMOrForeign<'de, Rec, Arg, Arr, Str>>,
+    } = OpenMathKind::OME as _,
 
     /** <div class="openmath">
     If $B$ and $C$ are OpenMath objects, and $v_1,...,v_n$\;(n\geq0)$
@@ -123,12 +138,12 @@ where
 {
     /// The [`OpenMathKind`] associated with this object
     ///
-    /// ### Examples
-    ///```
-    /// use openmath::*;
-    /// let obj = OMObject(OpenMath::OMI(42.into()).into());
-    /// assert_eq!(obj.0.kind(),OpenMathKind::OMI);
-    ///```
+    //    /// ### Examples
+    //    ///```
+    //    /// use openmath::*;
+    //    /// let obj = OMObject(OpenMath::OMI(42.into()).into());
+    //    /// assert_eq!(obj.0.kind(),OpenMathKind::OMI);
+    //    ///```
     pub fn kind(&self) -> OpenMathKind {
         // SAFETY: Both types have #[repr(u8)] and all of Self's discriminant
         // values are OpenMathKind values.
