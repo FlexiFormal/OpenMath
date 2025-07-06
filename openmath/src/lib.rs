@@ -22,6 +22,9 @@ pub static OPENMATH_BASE_URI: std::sync::LazyLock<url::Url> = std::sync::LazyLoc
         url::Url::parse("http://www.openmath.org/cd").unwrap_unchecked()
     });
 
+/// XML namespace for OpenMath elements
+pub const XML_NAMESPACE: &str = "http://www.openmath.org/OpenMath";
+
 /// All OpenMath tags/kinds
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]

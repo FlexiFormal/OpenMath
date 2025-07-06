@@ -199,6 +199,17 @@ pub trait OMSerializable {
         serde_impl::SerdeSerializer(self, self.cd_base(), crate::OPENMATH_BASE_URI.as_str())
     }
 
+    #[cfg(feature = "xml")]
+    /// Returns something that [`Display`](std::fmt::Display)s
+    /// as the OpenMath XML of this object.
+    ///
+    /// ### Errors
+    /// if [as_openmath](OMSerializable::as_openmath) (or the underlying writer) does
+    #[inline]
+    fn xml(&self, pretty: bool) -> impl std::fmt::Display {
+        xml::XmlDisplay { pretty, o: self }
+    }
+
     /// returns this element as something that serializes into an OMOBJ; i.e. a "top-level"
     /// OpenMath object.
     #[inline]
@@ -540,6 +551,23 @@ pub trait OMSerializer<'s>: Sized {
 /// Wrapper that produces an OMOBJ wrapper in serialization
 #[impl_tools::autoimpl(Copy, Clone)]
 pub struct OMObject<'s, O: OMSerializable + ?Sized>(pub &'s O);
+impl<O: OMSerializable + ?Sized> OMObject<'_, O> {
+    #[cfg(feature = "xml")]
+    /// Returns something that `[Display]`(std::fmt::Display)s as the OpenMath XML
+    /// of this object
+    ///
+    /// ### Errors
+    /// if [as_openmath](OMSerializable::as_openmath) or the underlying writer does
+    #[inline]
+    #[must_use]
+    pub fn xml(&self, pretty: bool, insert_namespace: bool) -> impl std::fmt::Display {
+        xml::XmlObjDisplay {
+            o: self.0,
+            pretty,
+            insert_namespace,
+        }
+    }
+}
 impl<O: OMSerializable> std::fmt::Display for OMObject<'_, O> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "OMOBJ({})", self.0.openmath_display())
@@ -979,11 +1007,32 @@ mod tests {
         assert_eq!(result, "OMI(123456789012345678901234567890)");
     }
 
+    #[cfg(feature = "xml")]
+    #[test]
+    fn test_omi_serialization_xml() {
+        let result = Int::from(42).xml(true).to_string();
+        assert_eq!(result, "<OMI>42</OMI>");
+
+        let result = Int::new("123456789012345678901234567890")
+            .expect("should be defined")
+            .xml(true)
+            .to_string();
+        assert_eq!(result, "<OMI>123456789012345678901234567890</OMI>");
+    }
+
     #[test]
     fn test_omf_serialization() {
         #[allow(clippy::approx_constant)]
         let result = (3.14159f32).openmath_display().to_string();
         assert!(result.starts_with("OMF(3.14159"));
+    }
+
+    #[cfg(feature = "xml")]
+    #[test]
+    fn test_omf_serialization_xml() {
+        #[allow(clippy::approx_constant)]
+        let result = (3.14159f32).xml(true).to_string();
+        assert!(result.starts_with("<OMF dec=\"3.14159"));
     }
 
     #[test]
@@ -992,10 +1041,24 @@ mod tests {
         assert_eq!(result, "OMSTR(\"42\")");
     }
 
+    #[cfg(feature = "xml")]
+    #[test]
+    fn test_omstr_serialization_xml() {
+        let result = "42".xml(true).to_string();
+        assert_eq!(result, "<OMSTR>42</OMSTR>");
+    }
+
     #[test]
     fn test_omb_serialization() {
         let result = vec![1u8, 2, 3, 4, 5].openmath_display().to_string();
         assert_eq!(result, "OMB(1,2,3,4,5)");
+    }
+
+    #[cfg(feature = "xml")]
+    #[test]
+    fn test_omb_serialization_xml() {
+        let result = b"foo bar".xml(true).to_string();
+        assert_eq!(result, "<OMB>Zm9vIGJhcg==</OMB>");
     }
 
     #[test]
@@ -1010,6 +1073,19 @@ mod tests {
         assert_eq!(result, "OMV(variable)");
     }
 
+    #[cfg(feature = "xml")]
+    #[test]
+    fn test_omv_serialization_xml() {
+        struct Omv(&'static str);
+        impl OMSerializable for Omv {
+            fn as_openmath<'s, S: OMSerializer<'s>>(&self, serializer: S) -> Result<S::Ok, S::Err> {
+                serializer.omv(&self.0)
+            }
+        }
+        let result = Omv("variable").xml(true).to_string();
+        assert_eq!(result, "<OMV name=\"variable\"/>");
+    }
+
     #[test]
     fn test_oms_serialization() {
         let result = Uri {
@@ -1022,12 +1098,38 @@ mod tests {
         assert_eq!(result, "OMS(http://test.org/test#symbol)");
     }
 
+    #[cfg(feature = "xml")]
+    #[test]
+    fn test_oms_serialization_xml() {
+        let result = Uri {
+            cd_base: "http://test.org",
+            cd: "test",
+            name: "symbol",
+        }
+        .xml(true)
+        .to_string();
+        assert_eq!(
+            result,
+            "<OMS cdbase=\"http://test.org\" cd=\"test\" name=\"symbol\"/>"
+        );
+    }
+
     #[test]
     fn test_oma_serialization() {
         let result = Point { x: 13.1, y: 17.4 }.openmath_display().to_string();
         assert_eq!(
             result,
             "OMA(OMS(http://example.org/geometry1#point),OMF(13.1),OMF(17.4))"
+        );
+    }
+
+    #[cfg(feature = "xml")]
+    #[test]
+    fn test_oma_serialization_xml() {
+        let result = Point { x: 13.1, y: 17.4 }.xml(true).to_string();
+        assert_eq!(
+            result,
+            "<OMA>\n  <OMS cdbase=\"http://example.org\" cd=\"geometry1\" name=\"point\"/>\n  <OMF dec=\"13.1\"/>\n  <OMF dec=\"17.4\"/>\n</OMA>"
         );
     }
 
@@ -1045,6 +1147,21 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "xml")]
+    #[test]
+    fn test_ombind_serialization_xml() {
+        let result = Lambda {
+            vars: ["x", "y"],
+            body: "x + y",
+        }
+        .xml(true)
+        .to_string();
+        assert_eq!(
+            result,
+            "<OMBIND cdbase=\"http://openmath.org\">\n  <OMS cd=\"fns1\" name=\"lambda\"/>\n  <OMBVAR>\n    <OMV name=\"x\"/>\n    <OMV name=\"y\"/>\n  </OMBVAR>\n  <OMSTR>x + y</OMSTR>\n</OMBIND>"
+        );
+    }
+
     #[test]
     fn test_empty_ombind() {
         let result = Lambda {
@@ -1056,6 +1173,21 @@ mod tests {
         assert_eq!(
             result,
             "OMBIND@http://openmath.org(OMS(fns1#lambda),[],OMSTR(\"true\"))"
+        );
+    }
+
+    #[cfg(feature = "xml")]
+    #[test]
+    fn test_empty_ombind_xml() {
+        let result = Lambda {
+            vars: [],
+            body: "true",
+        }
+        .xml(true)
+        .to_string();
+        assert_eq!(
+            result,
+            "<OMBIND cdbase=\"http://openmath.org\">\n  <OMS cd=\"fns1\" name=\"lambda\"/>\n  <OMBVAR/>\n  <OMSTR>true</OMSTR>\n</OMBIND>"
         );
     }
 }

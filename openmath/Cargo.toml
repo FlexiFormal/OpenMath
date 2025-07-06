@@ -16,7 +16,7 @@ serde = [
     "smallvec/serde",
 ]
 ## adds xml support
-xml = ["dep:xml"]
+xml = ["dep:quick-xml"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -44,7 +44,7 @@ serde_json = { workspace = true }
 [dependencies]
 #adtenum = { workspace = true, features = ["strum", "strumbra", "bigint"] }
 serde = { workspace = true, optional = true }
-xml = { workspace = true, optional = true }
+quick-xml = { workspace = true, optional = true }
 #serde-value = { workspace = true, optional = true }
 url = { workspace = true }
 #num-bigint = { workspace = true }
