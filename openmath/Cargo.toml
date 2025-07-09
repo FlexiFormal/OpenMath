@@ -11,6 +11,7 @@ workspace = true
 serde = [
     "dep:serde",
     "url/serde",
+    "dep:serde_cow",
     "ordered-float/serde",
     "either/serde",
     "smallvec/serde",
@@ -42,22 +43,18 @@ tracing = { workspace = true }
 serde_json = { workspace = true }
 
 [dependencies]
+document-features = { workspace = true }
 #adtenum = { workspace = true, features = ["strum", "strumbra", "bigint"] }
-serde = { workspace = true, optional = true }
-quick-xml = { workspace = true, optional = true }
-#serde-value = { workspace = true, optional = true }
 url = { workspace = true }
-#num-bigint = { workspace = true }
 ordered-float = { workspace = true }
 #strumbra = { workspace = true }
-#dyn-clone = { workspace = true }
 rustc-hash = { workspace = true }
 either = { workspace = true }
 smallvec = { workspace = true }
 impl-tools = { workspace = true }
 paste = { workspace = true }
-document-features = { workspace = true }
-strum = { workspace = true }
 thiserror = { workspace = true }
-#base64 = { workspace = true }
-#derive_more = { workspace = true, features = ["from"] }
+
+serde = { workspace = true, optional = true }
+serde_cow = { workspace = true, optional = true }
+quick-xml = { workspace = true, optional = true }

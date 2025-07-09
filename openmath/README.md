@@ -10,20 +10,21 @@ OpenMath is a standard for representing mathematical expressions in a machine-re
 ### Serialization & Deserialization
 - [`OMSerializable`] trait for converting Rust types to <span style="font-variant:small-caps;">OpenMath</span>
 - [`OMDeserializable`] trait for parsing <span style="font-variant:small-caps;">OpenMath</span> into Rust types
-- Built-in support for serde-based formats (JSON, XML, etc.)
+- Built-in support for serde-based formats (JSON, etc.) following the
+  OpenMath JSON specification, specification-conform XML (de)serialization., official binary
+  representation is WiP
 
 
 ## Features
 
 - **Zero-copy deserialization** where possible
 - **Arbitrary precision integers** with automatic small/big integer optimization
-- **Flexible serialization** to multiple formats
 
 ## TODO
 
 - attributions via OMATTR (ser/de)
 - structure sharing via OMR
-- binary, xml
+- binary
 
 [1]: https://openmath.org/standard/om20-2019-07-01/omstd20.html
 [2]: https://openmath.org/cd/

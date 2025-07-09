@@ -54,7 +54,7 @@ pub(super) trait E<'e, 's: 'e>: AsRef<Event<'e>> {
     fn into_empty(self) -> BytesStart<'e>;
 
     fn as_empty(&self) -> &BytesStart<'e> {
-        // SAFETY only gets called if known to be an Event::Empty!
+        // SAFETY: private method; only gets called if known to be an Event::Empty!
         unsafe {
             let Event::Empty(s) = self.as_ref() else {
                 std::hint::unreachable_unchecked()
@@ -63,7 +63,7 @@ pub(super) trait E<'e, 's: 'e>: AsRef<Event<'e>> {
         }
     }
     fn as_start(&self) -> &BytesStart<'e> {
-        // SAFETY only gets called if known to be an Event::Start!
+        // SAFETY: private method; only gets called if known to be an Event::Start!
         unsafe {
             let Event::Start(s) = self.as_ref() else {
                 std::hint::unreachable_unchecked()
@@ -97,7 +97,7 @@ impl<'e, 's: 'e> E<'e, 's> for Ev<'s> {
         self.0
     }
     fn into_empty(self) -> BytesStart<'e> {
-        // SAFETY only gets called if known to be an Event::Empty!
+        // SAFETY: private method; only gets called if known to be an Event::Empty!
         unsafe {
             let Event::Empty(s) = self.0 else {
                 std::hint::unreachable_unchecked()
@@ -116,7 +116,7 @@ impl<'e, 's: 'e> E<'e, 's> for Ev<'s> {
         es.attributes().find_map(|a| {
             a.ok().and_then(|a| {
                 if a.key.as_ref() == name.as_bytes() {
-                    // We know this is a slice of lifetime 's, but quick_xml doesn't
+                    // SAFETY: We know this is a slice of lifetime 's, but quick_xml doesn't
                     // return the most general applicable lifetime
                     Some(unsafe { std::mem::transmute::<Cow<'_, _>, Cow<'s, _>>(a.value) })
                 } else {
@@ -130,7 +130,7 @@ impl<'e, 's: 'e> E<'e, 's> for Ev<'s> {
         es.attributes().find_map(|a| {
             a.ok().and_then(|a| {
                 if a.key.as_ref() == name.as_bytes() {
-                    // We know this is a slice of lifetime 's, but quick_xml doesn't
+                    // SAFETY: We know this is a slice of lifetime 's, but quick_xml doesn't
                     // return the most general applicable lifetime
                     Some(unsafe { std::mem::transmute::<Cow<'_, _>, Cow<'s, _>>(a.value) })
                 } else {
@@ -152,7 +152,7 @@ impl<'e, 's: 'e> E<'e, 's> for NEv<'e> {
         self.0
     }
     fn into_empty(self) -> BytesStart<'e> {
-        // SAFETY only gets called if known to be an Event::Empty!
+        // SAFETY: privae method; only gets called if known to be an Event::Empty!
         unsafe {
             let Event::Empty(s) = self.0 else {
                 std::hint::unreachable_unchecked()
@@ -207,20 +207,14 @@ fn cowfrombytes(cow: Cow<'_, [u8]>) -> Result<Cow<'_, str>, std::str::Utf8Error>
     }
 }
 
-fn tryfrombytes<'s, Str: super::StringLike<'s>, E: std::fmt::Display>(
-    cow: Cow<'s, [u8]>,
-    now: u64,
-) -> Result<Str, XmlReadError<E>> {
-    Str::try_from_bytes(cow).map_or(Err(XmlReadError::RequiresAllocating(now)), |e| {
-        e.map_err(Into::into)
+fn tryfrombytes<E: std::fmt::Display>(cow: Cow<'_, [u8]>) -> Result<Cow<'_, str>, XmlReadError<E>> {
+    Ok(match cow {
+        Cow::Borrowed(s) => Cow::Borrowed(std::str::from_utf8(s)?),
+        Cow::Owned(s) => Cow::Owned(String::from_utf8(s).map_err(|e| e.utf8_error())?),
     })
 }
 
-pub(super) trait Readable<'s, Arr, Str, O: super::OMDeserializable<'s, Arr, Str>>
-where
-    Arr: super::Bytes<'s>,
-    Str: super::StringLike<'s>,
-{
+pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
     type Input;
     type E<'e>: E<'e, 's>
     where
@@ -237,8 +231,7 @@ where
     fn next_omforeign(
         &mut self,
         cd_base: &str,
-    ) -> Result<ControlFlow<Either<O, super::OMForeign<'s, O, Arr, Str>>, bool>, XmlReadError<O::Err>>
-    {
+    ) -> Result<ControlFlow<Either<O, super::OMForeign<'s, O>>, bool>, XmlReadError<O::Err>> {
         let now = self.now();
         let n = self.next()?;
         match n.as_ref() {
@@ -247,10 +240,10 @@ where
                     Self::omf(n.into_empty(), cd_base)?.map_right(OMForeign::OM),
                 )), //next!(@ret Self::omf($event, &$cd_base)?),
                 b"OMV" => Ok(ControlFlow::Break(
-                    Self::omv(n, cd_base, now)?.map_right(OMForeign::OM),
+                    Self::omv(n, cd_base)?.map_right(OMForeign::OM),
                 )),
                 b"OMS" => Ok(ControlFlow::Break(
-                    Self::oms(n, cd_base, now)?.map_right(OMForeign::OM),
+                    Self::oms(n, cd_base)?.map_right(OMForeign::OM),
                 )),
                 b"OME" => Err(XmlReadError::NonEmptyExpectedFor("OME", now)),
                 b"OMA" => Err(XmlReadError::NonEmptyExpectedFor("OMA", now)),
@@ -265,12 +258,12 @@ where
                 b"OMFOREIGN" => {
                     let encoding = n
                         .get_attr_from_start("encoding")
-                        .map(|s| tryfrombytes(s, now))
+                        .map(tryfrombytes)
                         .transpose()?;
                     let name: smallvec::SmallVec<u8, 12> = e.name().0.into();
                     drop(n);
                     let end = quick_xml::name::QName(&name);
-                    let value = tryfrombytes(self.until(end)?, now)?;
+                    let value = tryfrombytes(self.until(end)?)?;
                     if !matches!(self.next()?.as_ref(), Event::End(_)) {
                         return Err(XmlReadError::UnexpectedTag(self.now()));
                     }
@@ -348,14 +341,14 @@ where
     fn handle_next(
         &mut self,
         cd_base: &str,
-    ) -> Result<ControlFlow<Either<O, OM<'s, O, Arr, Str>>, bool>, XmlReadError<O::Err>> {
+    ) -> Result<ControlFlow<Either<O, OM<'s, O>>, bool>, XmlReadError<O::Err>> {
         let now = self.now();
         let n = self.next()?;
         match n.as_ref() {
             Event::Empty(e) => match e.local_name().as_ref() {
                 b"OMF" => Ok(ControlFlow::Break(Self::omf(n.into_empty(), cd_base)?)), //next!(@ret Self::omf($event, &$cd_base)?),
-                b"OMV" => Ok(ControlFlow::Break(Self::omv(n, cd_base, now)?)),
-                b"OMS" => Ok(ControlFlow::Break(Self::oms(n, cd_base, now)?)),
+                b"OMV" => Ok(ControlFlow::Break(Self::omv(n, cd_base)?)),
+                b"OMS" => Ok(ControlFlow::Break(Self::oms(n, cd_base)?)),
                 b"OME" => Err(XmlReadError::NonEmptyExpectedFor("OME", now)),
                 b"OMA" => Err(XmlReadError::NonEmptyExpectedFor("OMA", now)),
                 b"OMBIND" => Err(XmlReadError::NonEmptyExpectedFor("OMBIND", now)),
@@ -419,12 +412,41 @@ where
         }
     }
 
-    fn read(mut self) -> Result<O, XmlReadError<O::Err>>
+    fn read_obj(mut self) -> Result<O, XmlReadError<O::Err>>
     where
         Self: Sized,
     {
+        let cd_base = crate::OPENMATH_BASE_URI.as_str();
         loop {
-            if let ControlFlow::Break(b) = self.handle_next(crate::OPENMATH_BASE_URI.as_str())? {
+            let now = self.now();
+            let n = self.next()?;
+            match n.as_ref() {
+                Event::Start(s) if s.name().0 == b"OMOBJ" => {
+                    let a = n
+                        .get_attr_from_start("cdbase")
+                        .map(cowfrombytes)
+                        .transpose()?;
+                    let cd_base = a.unwrap_or(Cow::Borrowed(cd_base));
+                    drop(n);
+                    return self.read(Some(&*cd_base));
+                }
+                Event::Text(t) if !t.as_ref().iter().all(u8::is_ascii_whitespace) => {
+                    return Err(XmlReadError::UnexpectedTag(now));
+                }
+                Event::Eof => return Err(XmlReadError::NoObject),
+                Event::End(_) | Event::Empty(_) => return Err(XmlReadError::UnexpectedTag(now)),
+                _ => (),
+            }
+        }
+    }
+
+    fn read(mut self, cd_base: Option<&str>) -> Result<O, XmlReadError<O::Err>>
+    where
+        Self: Sized,
+    {
+        let cd_base = cd_base.unwrap_or(crate::OPENMATH_BASE_URI.as_str());
+        loop {
+            if let ControlFlow::Break(b) = self.handle_next(cd_base)? {
                 return match b {
                     Either::Left(e) => Ok(e),
                     Either::Right(_) => Err(XmlReadError::NotFullyConvertible),
@@ -433,10 +455,7 @@ where
         }
     }
 
-    fn omi(
-        &mut self,
-        cd_base: &str,
-    ) -> Result<Either<O, OM<'s, O, Arr, Str>>, XmlReadError<O::Err>> {
+    fn omi(&mut self, cd_base: &str) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
         let Event::Text(i) = self.next()?.into_ref() else {
             return Err(XmlReadError::ExpectedText);
         };
@@ -453,10 +472,7 @@ where
         O::from_openmath(OM::OMI(int), cd_base).map_err(XmlReadError::Conversion)
     }
 
-    fn omb(
-        &mut self,
-        cd_base: &str,
-    ) -> Result<Either<O, OM<'s, O, Arr, Str>>, XmlReadError<O::Err>> {
+    fn omb(&mut self, cd_base: &str) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
         use crate::base64::Base64Decodable;
         let Event::Text(i) = self.next()?.into_ref() else {
             return Err(XmlReadError::ExpectedText);
@@ -473,7 +489,7 @@ where
     fn omf(
         event: BytesStart<'_>,
         cd_base: &str,
-    ) -> Result<Either<O, OM<'s, O, Arr, Str>>, XmlReadError<O::Err>> {
+    ) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
         let Some(v) = event.attributes().find_map(|a| {
             a.ok().and_then(|a| {
                 if a.key.as_ref() == b"hex" {
@@ -497,13 +513,9 @@ where
         O::from_openmath(OM::OMF(f), cd_base).map_err(XmlReadError::Conversion)
     }
 
-    fn omstr(
-        &mut self,
-        cd_base: &str,
-    ) -> Result<Either<O, OM<'s, O, Arr, Str>>, XmlReadError<O::Err>> {
-        let now = self.now();
+    fn omstr(&mut self, cd_base: &str) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
         let cow = self.next()?.into_str()?;
-        let s = tryfrombytes(cow, now)?;
+        let s = tryfrombytes(cow)?;
         if !matches!(self.next()?.as_ref(), Event::End(_)) {
             return Err(XmlReadError::UnexpectedTag(self.now()));
         }
@@ -513,29 +525,27 @@ where
     fn omv(
         event: Self::E<'_>,
         cd_base: &str,
-        now: u64,
-    ) -> Result<Either<O, OM<'s, O, Arr, Str>>, XmlReadError<O::Err>> {
+    ) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
         let Some(cow) = event.get_attr_from_empty("name") else {
             return Err(XmlReadError::ExpectedAttribute("name"));
         };
-        let s = tryfrombytes(cow, now)?;
+        let s = tryfrombytes(cow)?;
         O::from_openmath(OM::OMV(s), cd_base).map_err(XmlReadError::Conversion)
     }
 
     fn oms(
         event: Self::E<'_>,
         cd_base: &str,
-        now: u64,
-    ) -> Result<Either<O, OM<'s, O, Arr, Str>>, XmlReadError<O::Err>> {
+    ) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
         let Some(name) = event.get_attr_from_empty("name") else {
             return Err(XmlReadError::ExpectedAttribute("name"));
         };
-        let name = tryfrombytes(name, now)?;
+        let name = tryfrombytes(name)?;
 
         let Some(cd_name) = event.get_attr_from_empty("cd") else {
             return Err(XmlReadError::ExpectedAttribute("cd"));
         };
-        let cd_name = tryfrombytes(cd_name, now)?;
+        let cd_name = tryfrombytes(cd_name)?;
 
         if let Some(s) = event.borrow_attr("cdbase") {
             let s = std::str::from_utf8(s.as_ref())?;
@@ -549,7 +559,7 @@ where
         &mut self,
         cd_base: &str,
         off: u64,
-    ) -> Result<Either<O, OM<'s, O, Arr, Str>>, XmlReadError<O::Err>> {
+    ) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
         let ControlFlow::Break(head) = self.handle_next(cd_base)? else {
             return Err(XmlReadError::NonEmptyExpectedFor("OMA Applicant", off));
         };
@@ -575,7 +585,7 @@ where
         &mut self,
         cd_base: &str,
         now: u64,
-    ) -> Result<Either<O, OM<'s, O, Arr, Str>>, XmlReadError<O::Err>> {
+    ) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
         let (ocd_base, cd_name, name) = {
             let event = self.next()?;
             match event.as_ref() {
@@ -583,14 +593,14 @@ where
                     let Some(name) = event.get_attr_from_empty("name") else {
                         return Err(XmlReadError::ExpectedAttribute("name"));
                     };
-                    let name = tryfrombytes(name, now)?;
+                    let name = tryfrombytes(name)?;
                     let Some(cd_name) = event.get_attr_from_empty("cd") else {
                         return Err(XmlReadError::ExpectedAttribute("cd"));
                     };
-                    let cd_name = tryfrombytes(cd_name, now)?;
+                    let cd_name = tryfrombytes(cd_name)?;
                     let cd_base = event
                         .get_attr_from_empty("cdbase")
-                        .map(|s| tryfrombytes(s, now))
+                        .map(tryfrombytes)
                         .transpose()?;
                     (cd_base, cd_name, name)
                 }
@@ -623,7 +633,7 @@ where
         &mut self,
         cd_base: &str,
         off: u64,
-    ) -> Result<Either<O, OM<'s, O, Arr, Str>>, XmlReadError<O::Err>> {
+    ) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
         let ControlFlow::Break(head) = self.handle_next(cd_base)? else {
             return Err(XmlReadError::NonEmptyExpectedFor("OMBIND", off));
         };
@@ -649,7 +659,7 @@ where
                             let Some(cow) = next.get_attr_from_empty("name") else {
                                 return Err(XmlReadError::ExpectedAttribute("name"));
                             };
-                            let s = tryfrombytes(cow, now)?;
+                            let s = tryfrombytes(cow)?;
                             context.push(s);
                             drop(next);
                         }
@@ -685,11 +695,9 @@ pub(super) struct FromString<'s> {
     position: u64,
 }
 
-impl<'s, Arr, Str, O> Readable<'s, Arr, Str, O> for FromString<'s>
+impl<'s, O> Readable<'s, O> for FromString<'s>
 where
-    Arr: super::Bytes<'s>,
-    Str: super::StringLike<'s>,
-    O: super::OMDeserializable<'s, Arr, Str>,
+    O: super::OMDeserializable<'s>,
 {
     type Input = &'s str;
     type E<'e>
@@ -745,11 +753,9 @@ pub(super) struct Reader<R: std::io::BufRead> {
     position: u64,
     //cd_base: Cow<'static, str>,
 }
-impl<Arr, Str, O, R: std::io::BufRead> Readable<'static, Arr, Str, O> for Reader<R>
+impl<O, R: std::io::BufRead> Readable<'static, O> for Reader<R>
 where
-    Arr: super::Bytes<'static>,
-    Str: super::StaticStringLike<'static>,
-    O: super::OMDeserializable<'static, Arr, Str>,
+    O: super::OMDeserializable<'static>,
 {
     type Input = R;
     type E<'e>
