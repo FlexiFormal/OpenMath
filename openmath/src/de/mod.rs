@@ -153,6 +153,19 @@ let s = r#"{
 let r = serde_json::from_str::<'_, OMFromSerde<SimplifiedInt>>(s)
     .expect("valid json, openmath, and arithmetic expression");
 assert_eq!(r.take().0, 4);
+# #[cfg(feature="xml")]
+# {
+// If the xml feature is active:
+let s = r#"
+<OMA cdbase="http://www.openmath.org/cd">
+  <OMS cd="arith1" name="plus"/>
+  <OMI>2</OMI>
+  <OMI>2</OMI>
+</OMA>"#;
+let r = SimplifiedInt::from_openmath_xml(s)
+    .expect("valid xml, openmath, and arithmetic expression");
+assert_eq!(r.0, 4);
+# }
 # }
 ```
 
@@ -186,6 +199,16 @@ where
     ) -> Result<Either<Self, OM<'de, Self, Arr, Str>>, Self::Err>
     where
         Self: Sized;
+
+    #[cfg(feature = "xml")]
+    ///
+    fn from_openmath_xml(input: &'de str) -> Result<Self, xml::XmlReadError<Self::Err>>
+    where
+        Self: Sized,
+    {
+        use xml::Readable;
+        <xml::FromString<'de> as Readable<'de, Arr, Str, Self>>::new(input).read()
+    }
 }
 /// Trait for types that can be deserialized as owned values OpenMath objects.
 ///
@@ -218,6 +241,18 @@ pub trait OMDeserializableOwned: std::fmt::Debug {
     ) -> Result<Either<Self, OM<'d, Self, Vec<u8>, String>>, Self::Err>
     where
         Self: Sized;
+
+    #[cfg(feature = "xml")]
+    ///
+    fn from_openmath_xml_reader<R: std::io::BufRead>(
+        reader: R,
+    ) -> Result<Self, xml::XmlReadError<Self::Err>>
+    where
+        Self: Sized,
+    {
+        use xml::Readable;
+        <xml::Reader<R> as Readable<'static, Vec<u8>, String, Self>>::new(reader).read()
+    }
 }
 
 /// Blanket implementation to allow owned deserializable types to work with the borrowed trait.
@@ -396,6 +431,7 @@ mod hidden {
     #[cfg(not(feature = "serde"))]
     pub trait SealedB<'s>: std::fmt::Debug + std::ops::Deref<Target = [u8]> + 's {}
     impl<'s> SealedStr<'s> for &'s str {}
+    impl<'s> SealedStr<'s> for Cow<'s, str> {}
     impl SealedStr<'_> for String {}
     impl<'s> SealedB<'s> for Cow<'s, [u8]> {}
     impl SealedB<'_> for Vec<u8> {}
@@ -413,6 +449,8 @@ mod hidden {
 pub trait StringLike<'s>: hidden::SealedStr<'s> + std::fmt::Display + Clone {
     fn split_uri(self) -> Option<(Self, Self, Self)>;
     fn into_int(self) -> Option<crate::Int<'s>>;
+    fn from_str(s: &'s str) -> Self;
+    fn try_from_bytes(cow: Cow<'s, [u8]>) -> Option<Result<Self, std::str::Utf8Error>>;
 }
 impl<'s> StringLike<'s> for &'s str {
     fn split_uri(self) -> Option<(Self, Self, Self)> {
@@ -423,6 +461,47 @@ impl<'s> StringLike<'s> for &'s str {
     #[inline]
     fn into_int(self) -> Option<crate::Int<'s>> {
         crate::Int::new(self)
+    }
+    #[inline]
+    fn from_str(s: &'s str) -> Self {
+        s
+    }
+    fn try_from_bytes(cow: Cow<'s, [u8]>) -> Option<Result<Self, std::str::Utf8Error>> {
+        if let Cow::Borrowed(s) = cow {
+            Some(std::str::from_utf8(s))
+        } else {
+            None
+        }
+    }
+}
+
+impl<'s> StringLike<'s> for Cow<'s, str> {
+    fn split_uri(self) -> Option<(Self, Self, Self)> {
+        match self {
+            Self::Borrowed(b) => {
+                let (bcd, name) = b.rsplit_once(['#', '/'])?;
+                let (base, cd) = bcd.rsplit_once('/')?;
+                Some((Cow::Borrowed(base), Cow::Borrowed(cd), Cow::Borrowed(name)))
+            }
+            Self::Owned(s) => {
+                String::split_uri(s).map(|(a, b, c)| (Cow::Owned(a), Cow::Owned(b), Cow::Owned(c)))
+            }
+        }
+    }
+    #[inline]
+    fn into_int(self) -> Option<crate::Int<'s>> {
+        match self {
+            Self::Borrowed(s) => crate::Int::new(s),
+            Self::Owned(s) => crate::Int::try_from(s).ok(),
+        }
+    }
+    #[inline]
+    fn from_str(s: &'s str) -> Self {
+        Self::Borrowed(s)
+    }
+    #[inline]
+    fn try_from_bytes(cow: Cow<'s, [u8]>) -> Option<Result<Self, std::str::Utf8Error>> {
+        Some(Self::from_bytes(cow))
     }
 }
 impl StringLike<'_> for String {
@@ -436,6 +515,36 @@ impl StringLike<'_> for String {
     #[inline]
     fn into_int(self) -> Option<crate::Int<'static>> {
         crate::Int::from_string(self)
+    }
+    #[inline]
+    fn from_str(s: &'_ str) -> Self {
+        s.to_string()
+    }
+    #[inline]
+    fn try_from_bytes(cow: Cow<'_, [u8]>) -> Option<Result<Self, std::str::Utf8Error>> {
+        Some(Self::from_bytes(cow))
+    }
+}
+
+pub trait StaticStringLike<'s>: StringLike<'s> {
+    /// ## Errors
+    /// iff the Cow is not a valid utf8 str
+    fn from_bytes(cow: Cow<'s, [u8]>) -> Result<Self, std::str::Utf8Error>;
+}
+impl<'s> StaticStringLike<'s> for Cow<'s, str> {
+    fn from_bytes(cow: Cow<'s, [u8]>) -> Result<Self, std::str::Utf8Error> {
+        Ok(match cow {
+            Cow::Borrowed(b) => Self::Borrowed(std::str::from_utf8(b)?),
+            Cow::Owned(b) => Self::Owned(String::from_utf8(b).map_err(|e| e.utf8_error())?),
+        })
+    }
+}
+impl<'s> StaticStringLike<'s> for String {
+    fn from_bytes(cow: Cow<'s, [u8]>) -> Result<Self, std::str::Utf8Error> {
+        Ok(match cow {
+            Cow::Borrowed(b) => std::str::from_utf8(b)?.to_string(),
+            Cow::Owned(b) => Self::from_utf8(b).map_err(|e| e.utf8_error())?,
+        })
     }
 }
 

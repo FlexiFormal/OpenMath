@@ -387,6 +387,15 @@ impl Int<'_> {
             I::Heap(s) => s.as_ref().as_bytes()[0] == b'-',
         }
     }
+
+    #[must_use]
+    pub fn into_owned(self) -> Int<'static> {
+        match self.0 {
+            I::Stack(i) => Int(I::Stack(i)),
+            I::Heap(Cow::Owned(s)) => Int(I::Heap(Cow::Owned(s))),
+            I::Heap(b) => Int(I::Heap(Cow::Owned(b.into_owned()))),
+        }
+    }
 }
 
 #[cfg(test)]

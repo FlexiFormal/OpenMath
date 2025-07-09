@@ -15,7 +15,7 @@ serde = [
     "either/serde",
     "smallvec/serde",
 ]
-## adds xml support
+## adds deserialization from xml; requires the [quick-xml](https://docs.rs/quick-xml) crate
 xml = ["dep:quick-xml"]
 
 [package.metadata.docs.rs]

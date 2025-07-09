@@ -3,15 +3,13 @@ use std::fmt::Write;
 use crate::ser::OMForeignSerializable;
 
 #[derive(Debug, thiserror::Error)]
-pub enum WriteError {
-    //#[error("xml error: {0}")]
-    //Xml(#[from] quick_xml::errors::Error),
+pub enum XmlWriteError {
     #[error("error converting OpenMath: {0}")]
     Custom(String),
     #[error("fmt error")]
     Fmt(#[from] std::fmt::Error),
 }
-impl super::Error for WriteError {
+impl super::Error for XmlWriteError {
     fn custom(err: impl std::fmt::Display) -> Self {
         Self::Custom(err.to_string())
     }
@@ -107,7 +105,7 @@ impl<'f> XmlDisplayer<'_, 'f> {
 
 impl<'s, 'f> super::OMSerializer<'s> for XmlDisplayer<'s, 'f> {
     type Ok = ();
-    type Err = WriteError;
+    type Err = XmlWriteError;
     type SubSerializer<'ns>
         = XmlDisplayer<'ns, 'f>
     where

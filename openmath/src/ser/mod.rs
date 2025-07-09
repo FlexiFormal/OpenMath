@@ -61,8 +61,8 @@ use std::fmt::Write;
 
 #[cfg(feature = "serde")]
 mod serde_impl;
-#[cfg(feature = "xml")]
 pub(crate) mod xml;
+pub use xml::XmlWriteError;
 
 /// Trait for [`OMSerializer`]-Errors;
 pub trait Error {
@@ -199,7 +199,6 @@ pub trait OMSerializable {
         serde_impl::SerdeSerializer(self, self.cd_base(), crate::OPENMATH_BASE_URI.as_str())
     }
 
-    #[cfg(feature = "xml")]
     /// Returns something that [`Display`](std::fmt::Display)s
     /// as the OpenMath XML of this object.
     ///
@@ -552,7 +551,6 @@ pub trait OMSerializer<'s>: Sized {
 #[impl_tools::autoimpl(Copy, Clone)]
 pub struct OMObject<'s, O: OMSerializable + ?Sized>(pub &'s O);
 impl<O: OMSerializable + ?Sized> OMObject<'_, O> {
-    #[cfg(feature = "xml")]
     /// Returns something that `[Display]`(std::fmt::Display)s as the OpenMath XML
     /// of this object
     ///
@@ -1007,7 +1005,6 @@ mod tests {
         assert_eq!(result, "OMI(123456789012345678901234567890)");
     }
 
-    #[cfg(feature = "xml")]
     #[test]
     fn test_omi_serialization_xml() {
         let result = Int::from(42).xml(true).to_string();
@@ -1027,7 +1024,6 @@ mod tests {
         assert!(result.starts_with("OMF(3.14159"));
     }
 
-    #[cfg(feature = "xml")]
     #[test]
     fn test_omf_serialization_xml() {
         #[allow(clippy::approx_constant)]
@@ -1041,7 +1037,6 @@ mod tests {
         assert_eq!(result, "OMSTR(\"42\")");
     }
 
-    #[cfg(feature = "xml")]
     #[test]
     fn test_omstr_serialization_xml() {
         let result = "42".xml(true).to_string();
@@ -1054,7 +1049,6 @@ mod tests {
         assert_eq!(result, "OMB(1,2,3,4,5)");
     }
 
-    #[cfg(feature = "xml")]
     #[test]
     fn test_omb_serialization_xml() {
         let result = b"foo bar".xml(true).to_string();
@@ -1073,7 +1067,6 @@ mod tests {
         assert_eq!(result, "OMV(variable)");
     }
 
-    #[cfg(feature = "xml")]
     #[test]
     fn test_omv_serialization_xml() {
         struct Omv(&'static str);
@@ -1098,7 +1091,6 @@ mod tests {
         assert_eq!(result, "OMS(http://test.org/test#symbol)");
     }
 
-    #[cfg(feature = "xml")]
     #[test]
     fn test_oms_serialization_xml() {
         let result = Uri {
@@ -1123,7 +1115,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "xml")]
     #[test]
     fn test_oma_serialization_xml() {
         let result = Point { x: 13.1, y: 17.4 }.xml(true).to_string();
@@ -1147,7 +1138,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "xml")]
     #[test]
     fn test_ombind_serialization_xml() {
         let result = Lambda {
@@ -1176,7 +1166,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "xml")]
     #[test]
     fn test_empty_ombind_xml() {
         let result = Lambda {
