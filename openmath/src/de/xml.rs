@@ -57,10 +57,6 @@ pub(super) trait E<'e, 's: 'e>: AsRef<Event<'e>> {
         // SAFETY only gets called if known to be an Event::Empty!
         unsafe {
             let Event::Empty(s) = self.as_ref() else {
-                #[cfg(debug_assertions)]
-                {
-                    panic!("Wut: {:?}", self.as_ref());
-                }
                 std::hint::unreachable_unchecked()
             };
             s
@@ -70,10 +66,6 @@ pub(super) trait E<'e, 's: 'e>: AsRef<Event<'e>> {
         // SAFETY only gets called if known to be an Event::Start!
         unsafe {
             let Event::Start(s) = self.as_ref() else {
-                #[cfg(debug_assertions)]
-                {
-                    panic!("Wut: {:?}", self.as_ref());
-                }
                 std::hint::unreachable_unchecked()
             };
             s
@@ -108,10 +100,6 @@ impl<'e, 's: 'e> E<'e, 's> for Ev<'s> {
         // SAFETY only gets called if known to be an Event::Empty!
         unsafe {
             let Event::Empty(s) = self.0 else {
-                #[cfg(debug_assertions)]
-                {
-                    panic!("Wut: {:?}", self.0);
-                }
                 std::hint::unreachable_unchecked()
             };
             s
@@ -167,10 +155,6 @@ impl<'e, 's: 'e> E<'e, 's> for NEv<'e> {
         // SAFETY only gets called if known to be an Event::Empty!
         unsafe {
             let Event::Empty(s) = self.0 else {
-                #[cfg(debug_assertions)]
-                {
-                    panic!("Wut: {:?}", self.0);
-                }
                 std::hint::unreachable_unchecked()
             };
             s

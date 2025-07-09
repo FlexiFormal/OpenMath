@@ -201,7 +201,13 @@ where
         Self: Sized;
 
     #[cfg(feature = "xml")]
+    /// Deserializes self from a string of OpenMath XML.
     ///
+    /// # Errors
+    /// iff the string provided is invalid XML, or invalid OpenMath, or [from_openmath](OMDeserializable::from_openmath)
+    /// errors.
+    /// # Examples
+    /// See [trait documentation](OMDeserializable)
     fn from_openmath_xml(input: &'de str) -> Result<Self, xml::XmlReadError<Self::Err>>
     where
         Self: Sized,
@@ -243,7 +249,14 @@ pub trait OMDeserializableOwned: std::fmt::Debug {
         Self: Sized;
 
     #[cfg(feature = "xml")]
+    /// Deserializes self from any [Read](std::io::BufRead) of OpenMath XML.
     ///
+    /// # Errors
+    /// iff the by stream provided is invalid UTF8, XML, or OpenMath, or
+    /// [from_openmath](OMDeserializable::from_openmath)
+    /// errors.
+    /// # Examples
+    /// See [trait documentation](OMDeserializable)
     fn from_openmath_xml_reader<R: std::io::BufRead>(
         reader: R,
     ) -> Result<Self, xml::XmlReadError<Self::Err>>
