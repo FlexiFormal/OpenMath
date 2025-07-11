@@ -1,6 +1,9 @@
 use std::fmt::Write;
 
-use crate::ser::OMForeignSerializable;
+use crate::{
+    OMSerializable,
+    ser::{OMAttrSerializable, OMForeignSerializable},
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum XmlWriteError {
@@ -92,6 +95,21 @@ impl<'f> XmlDisplayer<'_, 'f> {
         }
         Ok(())
     }
+
+    fn indented(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> Result<(), XmlWriteError>,
+    ) -> Result<(), XmlWriteError> {
+        if let Some((_, v)) = self.indent.as_mut() {
+            *v += 1;
+        }
+        let r = f(self);
+        if let Some((_, v)) = self.indent.as_mut() {
+            *v -= 1;
+        }
+        r
+    }
+
     #[inline]
     const fn clone(&mut self) -> XmlDisplayer<'_, 'f> {
         XmlDisplayer {
@@ -100,6 +118,37 @@ impl<'f> XmlDisplayer<'_, 'f> {
             next_ns: self.next_ns,
             current_ns: self.current_ns,
         }
+    }
+
+    fn omforeign<OM: OMSerializable, F: std::fmt::Display>(
+        &mut self,
+        a: &OMForeignSerializable<'_, OM, F>,
+    ) -> Result<(), XmlWriteError> {
+        match a {
+            OMForeignSerializable::OM(o) => o.as_openmath(self.clone())?,
+            OMForeignSerializable::Foreign { encoding, value } => {
+                let ind = self.indent.is_some();
+                if ind {
+                    self.indent()?;
+                }
+                if let Some(enc) = encoding {
+                    self.w.write_str("<OMFOREIGN encoding=\"")?;
+                    write!(DisplayEscaper(self.w), "{enc}")?;
+                    self.w.write_str("\">")?;
+                } else {
+                    self.w.write_str("<OMFOREIGN>")?;
+                }
+                if ind {
+                    self.indent()?;
+                    write!(DisplayEscaper(self.w), "  {value}")?;
+                    self.indent()?;
+                } else {
+                    write!(DisplayEscaper(self.w), "{value}")?;
+                }
+                self.w.write_str("</OMFOREIGN>")?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -211,39 +260,13 @@ impl<'s, 'f> super::OMSerializer<'s> for XmlDisplayer<'s, 'f> {
         } else {
             self.w.write_str("<OME>")?;
         }
-        if let Some((_, v)) = self.indent.as_mut() {
-            *v += 1;
-        }
-        self.clone().oms(cd_name, name)?;
-        for a in args {
-            match a {
-                OMForeignSerializable::OM(o) => o.as_openmath(self.clone())?,
-                OMForeignSerializable::Foreign { encoding, value } => {
-                    let ind = self.indent.is_some();
-                    if ind {
-                        self.indent()?;
-                    }
-                    if let Some(enc) = encoding {
-                        self.w.write_str("<OMFOREIGN encoding=\"")?;
-                        write!(DisplayEscaper(self.w), "{enc}")?;
-                        self.w.write_str("\">")?;
-                    } else {
-                        self.w.write_str("<OMFOREIGN>")?;
-                    }
-                    if ind {
-                        self.indent()?;
-                        write!(DisplayEscaper(self.w), "  {value}")?;
-                        self.indent()?;
-                    } else {
-                        write!(DisplayEscaper(self.w), "{value}")?;
-                    }
-                    self.w.write_str("</OMFOREIGN>")?;
-                }
+        self.indented(|nslf| {
+            nslf.clone().oms(cd_name, name)?;
+            for a in args {
+                nslf.omforeign(&a)?;
             }
-        }
-        if let Some((_, v)) = self.indent.as_mut() {
-            *v -= 1;
-        }
+            Ok(())
+        })?;
         self.indent()?;
         self.w.write_str("</OME>")?;
         Ok(())
@@ -265,23 +288,83 @@ impl<'s, 'f> super::OMSerializer<'s> for XmlDisplayer<'s, 'f> {
         } else {
             self.w.write_str("<OMA>")?;
         }
-        if let Some((_, v)) = self.indent.as_mut() {
-            *v += 1;
-        }
-
-        head.as_openmath(self.clone())?;
-        for a in args {
-            a.as_openmath(self.clone())?;
-        }
-
-        if let Some((_, v)) = self.indent.as_mut() {
-            *v -= 1;
-        }
+        self.indented(|nslf| {
+            head.as_openmath(nslf.clone())?;
+            for a in args {
+                a.as_openmath(nslf.clone())?;
+            }
+            Ok(())
+        })?;
         self.indent()?;
         self.w.write_str("</OMA>")?;
         Ok(())
     }
-    fn ombind<'a, St: std::fmt::Display + 'a, I: IntoIterator<Item = &'a St>>(
+
+    fn omattr<
+        'a,
+        T: super::OMSerializable + 'a,
+        D: std::fmt::Display + 'a,
+        I: IntoIterator<Item = &'a super::OMAttrSerializable<'a, T, D>>,
+    >(
+        mut self,
+        attrs: I,
+        atp: &'a impl super::OMSerializable,
+    ) -> Result<Self::Ok, Self::Err>
+    where
+        I::IntoIter: ExactSizeIterator,
+    {
+        let attrs = attrs.into_iter();
+        if attrs.len() == 0 {
+            return atp.as_openmath(self.clone());
+        }
+
+        self.indent()?;
+        if let Some(ns) = self.next_ns.take() {
+            self.w.write_str("<OMATTR cdbase=\"")?;
+            write!(DisplayEscaper(self.w), "{ns}")?;
+            self.w.write_str("\">")?;
+            self.current_ns = ns;
+        } else {
+            self.w.write_str("<OMATTR>")?;
+        }
+
+        self.indented(move |nslf| {
+            nslf.indent()?;
+            nslf.w.write_str("<OMATP>")?;
+            nslf.indented(move |nslf| {
+                for OMAttrSerializable {
+                    cdbase,
+                    cd,
+                    name,
+                    value,
+                } in attrs
+                {
+                    let mut s = nslf.clone();
+                    if let Some(cdbase) = cdbase {
+                        s.next_ns = Some(cdbase);
+                    }
+                    s.oms(cd, name)?;
+                    nslf.omforeign(value)?;
+                }
+                Ok(())
+            })?;
+            nslf.indent()?;
+            nslf.w.write_str("</OMATP>")?;
+            Ok(())
+        })?;
+
+        atp.as_openmath(self.clone())?;
+        self.indent()?;
+        self.w.write_str("</OMATTR>")?;
+        Ok(())
+    }
+
+    fn ombind<
+        'a,
+        St: std::fmt::Display + 'a,
+        O: super::OMSerializable + 'a,
+        I: IntoIterator<Item = (&'a St, &'a [&'a super::OMAttrSerializable<'a, O, St>])>,
+    >(
         mut self,
         head: &'a impl super::OMSerializable,
         vars: I,
@@ -299,40 +382,36 @@ impl<'s, 'f> super::OMSerializer<'s> for XmlDisplayer<'s, 'f> {
         } else {
             self.w.write_str("<OMBIND>")?;
         }
-        if let Some((_, v)) = self.indent.as_mut() {
-            *v += 1;
-        }
 
-        head.as_openmath(self.clone())?;
+        self.indented(|nslf| {
+            head.as_openmath(nslf.clone())?;
+            nslf.indent()?;
+            nslf.w.write_str("<OMBVAR")?;
+            let mut was_empty = true;
 
-        self.indent()?;
-        self.w.write_str("<OMBVAR")?;
-        let mut was_empty = true;
-        if let Some((_, v)) = self.indent.as_mut() {
-            *v += 1;
-        }
-        for v in vars {
+            nslf.indented(|nslf| {
+                for (v, attrs) in vars {
+                    if was_empty {
+                        nslf.w.write_char('>')?;
+                    }
+                    was_empty = false;
+                    if attrs.is_empty() {
+                        nslf.clone().omv(v)?;
+                    } else {
+                        nslf.clone().omattr(attrs.iter().copied(), &super::Omv(v))?;
+                    }
+                }
+                Ok(())
+            })?;
             if was_empty {
-                self.w.write_char('>')?;
+                nslf.w.write_str("/>")?;
+            } else {
+                nslf.indent()?;
+                nslf.w.write_str("</OMBVAR>")?;
             }
-            was_empty = false;
-            self.clone().omv(v)?;
-        }
-        if let Some((_, v)) = self.indent.as_mut() {
-            *v -= 1;
-        }
-        if was_empty {
-            self.w.write_str("/>")?;
-        } else {
-            self.indent()?;
-            self.w.write_str("</OMBVAR>")?;
-        }
+            body.as_openmath(nslf.clone())
+        })?;
 
-        body.as_openmath(self.clone())?;
-
-        if let Some((_, v)) = self.indent.as_mut() {
-            *v -= 1;
-        }
         self.indent()?;
         self.w.write_str("</OMBIND>")?;
         Ok(())

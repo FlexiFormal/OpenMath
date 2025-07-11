@@ -25,11 +25,36 @@ pub static OPENMATH_BASE_URI: std::sync::LazyLock<url::Url> = std::sync::LazyLoc
 /// XML namespace for OpenMath elements
 pub const XML_NAMESPACE: &str = "http://www.openmath.org/OpenMath";
 
-/// All OpenMath tags/kinds
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(u8)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub enum OMKind {
+macro_rules! omkinds {
+    ($( $(#[$meta:meta])* $id:ident = $v:literal ),* $(,)?) => {
+        /// All OpenMath tags/kinds
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #[repr(u8)]
+        #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+        pub enum OMKind {
+            $(
+                $(#[$meta])*
+                $id = $v
+            ),*
+        }
+        impl OMKind {
+            #[must_use]
+            pub const fn as_str(self) -> &'static str {
+                match self {$(
+                    Self::$id => stringify!($id)
+                ),*}
+            }
+        }
+        impl std::fmt::Display for OMKind {
+            #[inline]
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str(self.as_str())
+            }
+        }
+    };
+}
+
+omkinds! {
     /** <div class="openmath">
     Integers in the mathematical sense, with no predefined range.
     They are “infinite precision” integers (also called “bignums” in computer algebra).

@@ -44,6 +44,8 @@ pub enum XmlReadError<E: std::fmt::Display> {
     RequiresAllocating(u64),
     #[error("hexadecimal not yet implemented")]
     Hex,
+    #[error("value for OMATP key-value-pair missing")]
+    AttributeValue(u64),
 }
 
 pub(super) struct Ev<'e>(Event<'e>);
@@ -237,14 +239,15 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
         match n.as_ref() {
             Event::Empty(e) => match e.local_name().as_ref() {
                 b"OMF" => Ok(ControlFlow::Break(
-                    Self::omf(n.into_empty(), cd_base)?.map_right(OMForeign::OM),
+                    Self::omf(n.into_empty(), cd_base, Vec::new())?.map_right(OMForeign::OM),
                 )), //next!(@ret Self::omf($event, &$cd_base)?),
                 b"OMV" => Ok(ControlFlow::Break(
-                    Self::omv(n, cd_base)?.map_right(OMForeign::OM),
+                    Self::omv(n, cd_base, Vec::new())?.map_right(OMForeign::OM),
                 )),
                 b"OMS" => Ok(ControlFlow::Break(
-                    Self::oms(n, cd_base)?.map_right(OMForeign::OM),
+                    Self::oms(n, cd_base, Vec::new())?.map_right(OMForeign::OM),
                 )),
+                b"OMATTR" => Err(XmlReadError::NonEmptyExpectedFor("OMATTR", now)),
                 b"OME" => Err(XmlReadError::NonEmptyExpectedFor("OME", now)),
                 b"OMA" => Err(XmlReadError::NonEmptyExpectedFor("OMA", now)),
                 b"OMBIND" => Err(XmlReadError::NonEmptyExpectedFor("OMBIND", now)),
@@ -275,19 +278,19 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
                 b"OMI" => {
                     drop(n);
                     Ok(ControlFlow::Break(
-                        self.omi(cd_base)?.map_right(OMForeign::OM),
+                        self.omi(cd_base, Vec::new())?.map_right(OMForeign::OM),
                     ))
                 }
                 b"OMB" => {
                     drop(n);
                     Ok(ControlFlow::Break(
-                        self.omb(cd_base)?.map_right(OMForeign::OM),
+                        self.omb(cd_base, Vec::new())?.map_right(OMForeign::OM),
                     ))
                 }
                 b"OMSTR" => {
                     drop(n);
                     Ok(ControlFlow::Break(
-                        self.omstr(cd_base)?.map_right(OMForeign::OM),
+                        self.omstr(cd_base, Vec::new())?.map_right(OMForeign::OM),
                     ))
                 }
                 b"OMA" => {
@@ -298,7 +301,8 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
                     let cd_base = a.unwrap_or(Cow::Borrowed(cd_base));
                     drop(n);
                     Ok(ControlFlow::Break(
-                        self.oma(&cd_base, now)?.map_right(OMForeign::OM),
+                        self.oma(&cd_base, now, Vec::new())?
+                            .map_right(OMForeign::OM),
                     ))
                 }
                 b"OMBIND" => {
@@ -309,7 +313,8 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
                     let cd_base = a.unwrap_or(Cow::Borrowed(cd_base));
                     drop(n);
                     Ok(ControlFlow::Break(
-                        self.ombind(&cd_base, now)?.map_right(OMForeign::OM),
+                        self.ombind(&cd_base, now, Vec::new())?
+                            .map_right(OMForeign::OM),
                     ))
                 }
                 b"OME" => {
@@ -320,7 +325,19 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
                     let cd_base = a.unwrap_or(Cow::Borrowed(cd_base));
                     drop(n);
                     Ok(ControlFlow::Break(
-                        self.ome(&cd_base, now)?.map_right(OMForeign::OM),
+                        self.ome(&cd_base, now, Vec::new())?
+                            .map_right(OMForeign::OM),
+                    ))
+                }
+                b"OMATTR" => {
+                    let a = n
+                        .get_attr_from_start("cdbase")
+                        .map(cowfrombytes)
+                        .transpose()?;
+                    let cd_base = a.unwrap_or(Cow::Borrowed(cd_base));
+                    drop(n);
+                    Ok(ControlFlow::Break(
+                        self.omattr(&cd_base, Vec::new())?.map_right(OMForeign::OM),
                     ))
                 }
                 b"OMS" => Err(XmlReadError::EmptyExpectedFor("OMS", now)),
@@ -341,34 +358,40 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
     fn handle_next(
         &mut self,
         cd_base: &str,
+        attrs: Vec<super::Attr<'s, O>>,
     ) -> Result<ControlFlow<Either<O, OM<'s, O>>, bool>, XmlReadError<O::Err>> {
         let now = self.now();
         let n = self.next()?;
         match n.as_ref() {
             Event::Empty(e) => match e.local_name().as_ref() {
-                b"OMF" => Ok(ControlFlow::Break(Self::omf(n.into_empty(), cd_base)?)), //next!(@ret Self::omf($event, &$cd_base)?),
-                b"OMV" => Ok(ControlFlow::Break(Self::omv(n, cd_base)?)),
-                b"OMS" => Ok(ControlFlow::Break(Self::oms(n, cd_base)?)),
+                b"OMF" => Ok(ControlFlow::Break(Self::omf(
+                    n.into_empty(),
+                    cd_base,
+                    attrs,
+                )?)), //next!(@ret Self::omf($event, &$cd_base)?),
+                b"OMV" => Ok(ControlFlow::Break(Self::omv(n, cd_base, attrs)?)),
+                b"OMS" => Ok(ControlFlow::Break(Self::oms(n, cd_base, attrs)?)),
                 b"OME" => Err(XmlReadError::NonEmptyExpectedFor("OME", now)),
                 b"OMA" => Err(XmlReadError::NonEmptyExpectedFor("OMA", now)),
                 b"OMBIND" => Err(XmlReadError::NonEmptyExpectedFor("OMBIND", now)),
                 b"OMSTR" => Err(XmlReadError::NonEmptyExpectedFor("OMSTR", now)),
                 b"OMI" => Err(XmlReadError::NonEmptyExpectedFor("OMI", now)),
                 b"OMB" => Err(XmlReadError::NonEmptyExpectedFor("OMB", now)),
+                b"OMATTR" => Err(XmlReadError::NonEmptyExpectedFor("OMATTR", now)),
                 _ => Err(XmlReadError::UnexpectedTag(now)),
             },
             Event::Start(e) => match e.local_name().as_ref() {
                 b"OMI" => {
                     drop(n);
-                    Ok(ControlFlow::Break(self.omi(cd_base)?))
+                    Ok(ControlFlow::Break(self.omi(cd_base, attrs)?))
                 }
                 b"OMB" => {
                     drop(n);
-                    Ok(ControlFlow::Break(self.omb(cd_base)?))
+                    Ok(ControlFlow::Break(self.omb(cd_base, attrs)?))
                 }
                 b"OMSTR" => {
                     drop(n);
-                    Ok(ControlFlow::Break(self.omstr(cd_base)?))
+                    Ok(ControlFlow::Break(self.omstr(cd_base, attrs)?))
                 }
                 b"OMA" => {
                     let a = n
@@ -377,7 +400,7 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
                         .transpose()?;
                     let cd_base = a.unwrap_or(Cow::Borrowed(cd_base));
                     drop(n);
-                    Ok(ControlFlow::Break(self.oma(&cd_base, now)?))
+                    Ok(ControlFlow::Break(self.oma(&cd_base, now, attrs)?))
                 }
                 b"OMBIND" => {
                     let a = n
@@ -386,7 +409,7 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
                         .transpose()?;
                     let cd_base = a.unwrap_or(Cow::Borrowed(cd_base));
                     drop(n);
-                    Ok(ControlFlow::Break(self.ombind(&cd_base, now)?))
+                    Ok(ControlFlow::Break(self.ombind(&cd_base, now, attrs)?))
                 }
                 b"OME" => {
                     let a = n
@@ -395,7 +418,16 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
                         .transpose()?;
                     let cd_base = a.unwrap_or(Cow::Borrowed(cd_base));
                     drop(n);
-                    Ok(ControlFlow::Break(self.ome(&cd_base, now)?))
+                    Ok(ControlFlow::Break(self.ome(&cd_base, now, attrs)?))
+                }
+                b"OMATTR" => {
+                    let a = n
+                        .get_attr_from_start("cdbase")
+                        .map(cowfrombytes)
+                        .transpose()?;
+                    let cd_base = a.unwrap_or(Cow::Borrowed(cd_base));
+                    drop(n);
+                    Ok(ControlFlow::Break(self.omattr(&cd_base, attrs)?))
                 }
                 b"OMS" => Err(XmlReadError::EmptyExpectedFor("OMS", now)),
                 b"OMF" => Err(XmlReadError::EmptyExpectedFor("OMF", now)),
@@ -404,7 +436,7 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
             },
             Event::Text(t) if t.as_ref().iter().all(u8::is_ascii_whitespace) => {
                 drop(n);
-                self.handle_next(cd_base)
+                self.handle_next(cd_base, attrs)
             }
             Event::Eof => Err(XmlReadError::NoObject),
             Event::End(_) => Ok(ControlFlow::Continue(true)),
@@ -446,7 +478,7 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
     {
         let cd_base = cd_base.unwrap_or(crate::OPENMATH_BASE_URI.as_str());
         loop {
-            if let ControlFlow::Break(b) = self.handle_next(cd_base)? {
+            if let ControlFlow::Break(b) = self.handle_next(cd_base, Vec::new())? {
                 return match b {
                     Either::Left(e) => Ok(e),
                     Either::Right(_) => Err(XmlReadError::NotFullyConvertible),
@@ -455,7 +487,11 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
         }
     }
 
-    fn omi(&mut self, cd_base: &str) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
+    fn omi(
+        &mut self,
+        cd_base: &str,
+        attrs: Vec<super::Attr<'s, O>>,
+    ) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
         let Event::Text(i) = self.next()?.into_ref() else {
             return Err(XmlReadError::ExpectedText);
         };
@@ -469,10 +505,14 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
         if !matches!(self.next()?.as_ref(), Event::End(_)) {
             return Err(XmlReadError::UnexpectedTag(self.now()));
         }
-        O::from_openmath(OM::OMI(int), cd_base).map_err(XmlReadError::Conversion)
+        O::from_openmath(OM::OMI { int, attrs }, cd_base).map_err(XmlReadError::Conversion)
     }
 
-    fn omb(&mut self, cd_base: &str) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
+    fn omb(
+        &mut self,
+        cd_base: &str,
+        attrs: Vec<super::Attr<'s, O>>,
+    ) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
         use crate::base64::Base64Decodable;
         let Event::Text(i) = self.next()?.into_ref() else {
             return Err(XmlReadError::ExpectedText);
@@ -482,13 +522,21 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
         if !matches!(self.next()?.as_ref(), Event::End(_)) {
             return Err(XmlReadError::UnexpectedTag(self.now()));
         }
-        O::from_openmath(OM::OMB(b.into()), cd_base).map_err(XmlReadError::Conversion)
+        O::from_openmath(
+            OM::OMB {
+                bytes: b.into(),
+                attrs,
+            },
+            cd_base,
+        )
+        .map_err(XmlReadError::Conversion)
     }
 
     #[allow(clippy::needless_pass_by_value)]
     fn omf(
         event: BytesStart<'_>,
         cd_base: &str,
+        attrs: Vec<super::Attr<'s, O>>,
     ) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
         let Some(v) = event.attributes().find_map(|a| {
             a.ok().and_then(|a| {
@@ -507,35 +555,41 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
             return Err(XmlReadError::Hex);
         };
         let s = std::str::from_utf8(&v.value)?;
-        let f: f64 = s
+        let float: f64 = s
             .parse()
             .map_err(|_| XmlReadError::InvalidFloat(s.to_string()))?;
-        O::from_openmath(OM::OMF(f), cd_base).map_err(XmlReadError::Conversion)
+        O::from_openmath(OM::OMF { float, attrs }, cd_base).map_err(XmlReadError::Conversion)
     }
 
-    fn omstr(&mut self, cd_base: &str) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
+    fn omstr(
+        &mut self,
+        cd_base: &str,
+        attrs: Vec<super::Attr<'s, O>>,
+    ) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
         let cow = self.next()?.into_str()?;
-        let s = tryfrombytes(cow)?;
+        let string = tryfrombytes(cow)?;
         if !matches!(self.next()?.as_ref(), Event::End(_)) {
             return Err(XmlReadError::UnexpectedTag(self.now()));
         }
-        O::from_openmath(OM::OMSTR(s), cd_base).map_err(XmlReadError::Conversion)
+        O::from_openmath(OM::OMSTR { string, attrs }, cd_base).map_err(XmlReadError::Conversion)
     }
 
     fn omv(
         event: Self::E<'_>,
         cd_base: &str,
+        attrs: Vec<super::Attr<'s, O>>,
     ) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
         let Some(cow) = event.get_attr_from_empty("name") else {
             return Err(XmlReadError::ExpectedAttribute("name"));
         };
-        let s = tryfrombytes(cow)?;
-        O::from_openmath(OM::OMV(s), cd_base).map_err(XmlReadError::Conversion)
+        let name = tryfrombytes(cow)?;
+        O::from_openmath(OM::OMV { name, attrs }, cd_base).map_err(XmlReadError::Conversion)
     }
 
     fn oms(
         event: Self::E<'_>,
         cd_base: &str,
+        attrs: Vec<super::Attr<'s, O>>,
     ) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
         let Some(name) = event.get_attr_from_empty("name") else {
             return Err(XmlReadError::ExpectedAttribute("name"));
@@ -549,9 +603,25 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
 
         if let Some(s) = event.borrow_attr("cdbase") {
             let s = std::str::from_utf8(s.as_ref())?;
-            O::from_openmath(OM::OMS { cd_name, name }, s).map_err(XmlReadError::Conversion)
+            O::from_openmath(
+                OM::OMS {
+                    cd_name,
+                    name,
+                    attrs,
+                },
+                s,
+            )
+            .map_err(XmlReadError::Conversion)
         } else {
-            O::from_openmath(OM::OMS { cd_name, name }, cd_base).map_err(XmlReadError::Conversion)
+            O::from_openmath(
+                OM::OMS {
+                    cd_name,
+                    name,
+                    attrs,
+                },
+                cd_base,
+            )
+            .map_err(XmlReadError::Conversion)
         }
     }
 
@@ -559,13 +629,14 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
         &mut self,
         cd_base: &str,
         off: u64,
+        attrs: Vec<super::Attr<'s, O>>,
     ) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
-        let ControlFlow::Break(head) = self.handle_next(cd_base)? else {
+        let ControlFlow::Break(head) = self.handle_next(cd_base, Vec::new())? else {
             return Err(XmlReadError::NonEmptyExpectedFor("OMA Applicant", off));
         };
         let mut args = Vec::with_capacity(2);
         loop {
-            match self.handle_next(cd_base)? {
+            match self.handle_next(cd_base, Vec::new())? {
                 ControlFlow::Break(a) => args.push(a),
                 ControlFlow::Continue(true) => break,
                 ControlFlow::Continue(false) => return Err(XmlReadError::UnexpectedTag(off)),
@@ -575,6 +646,7 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
             OM::OMA {
                 head: head.map_right(Box::new),
                 args,
+                attrs,
             },
             cd_base,
         )
@@ -585,6 +657,7 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
         &mut self,
         cd_base: &str,
         now: u64,
+        attrs: Vec<super::Attr<'s, O>>,
     ) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
         let (ocd_base, cd_name, name) = {
             let event = self.next()?;
@@ -623,18 +696,142 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
                 cd_name,
                 name,
                 args,
+                attrs,
             },
             cd_base,
         )
         .map_err(XmlReadError::Conversion)
     }
 
+    fn omattr_pairs(
+        &mut self,
+        cd_base: &str,
+        attrs: &mut Vec<super::Attr<'s, O>>,
+    ) -> Result<(), XmlReadError<O::Err>> {
+        loop {
+            let now = self.now();
+            let next = self.next()?;
+            match next.as_ref() {
+                Event::End(_) => {
+                    drop(next);
+                    return Ok(());
+                }
+                Event::Empty(event) if event.local_name().as_ref() == b"OMS" => {
+                    let Some(name) = next.get_attr_from_empty("name") else {
+                        return Err(XmlReadError::ExpectedAttribute("name"));
+                    };
+                    let name = tryfrombytes(name)?;
+                    let Some(cd_name) = next.get_attr_from_empty("cd") else {
+                        return Err(XmlReadError::ExpectedAttribute("cd"));
+                    };
+                    let cd_name = tryfrombytes(cd_name)?;
+                    let cd_base_o = next
+                        .get_attr_from_empty("cdbase")
+                        .map(tryfrombytes)
+                        .transpose()?;
+                    drop(next);
+                    let now = self.now();
+                    match self.next_omforeign(cd_base)? {
+                        ControlFlow::Continue(true) => {
+                            return Err(XmlReadError::AttributeValue(now));
+                        }
+                        ControlFlow::Continue(false) => {
+                            return Err(XmlReadError::UnexpectedTag(now));
+                        }
+                        ControlFlow::Break(value) => attrs.push(super::Attr {
+                            cd_base: cd_base_o,
+                            cd_name,
+                            name,
+                            value,
+                        }),
+                    }
+                }
+                _ => return Err(XmlReadError::UnexpectedTag(now)),
+            }
+        }
+    }
+
+    fn omattr_i<R>(
+        &mut self,
+        cd_base: &str,
+        mut attrs: Vec<super::Attr<'s, O>>,
+        cont: impl FnOnce(&mut Self, Vec<super::Attr<'s, O>>) -> Result<R, XmlReadError<O::Err>>,
+    ) -> Result<R, XmlReadError<O::Err>> {
+        let now = self.now();
+        let next = self.next()?;
+        match next.as_ref() {
+            Event::Empty(e) if e.local_name().as_ref() == b"OMATP" => {
+                drop(next);
+            }
+            Event::Start(e) if e.local_name().as_ref() == b"OMATP" => {
+                drop(next);
+                self.omattr_pairs(cd_base, &mut attrs)?;
+            }
+            _ => return Err(XmlReadError::UnexpectedTag(now)),
+        }
+        let r = cont(self, attrs)?;
+        if !matches!(self.next()?.as_ref(), Event::End(_)) {
+            return Err(XmlReadError::UnexpectedTag(self.now()));
+        }
+        Ok(r)
+    }
+
+    #[inline]
+    fn omattr(
+        &mut self,
+        cd_base: &str,
+        attrs: Vec<super::Attr<'s, O>>,
+    ) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
+        self.omattr_i(cd_base, attrs, |nslf, attrs| {
+            let now = nslf.now();
+            let ControlFlow::Break(object) = nslf.handle_next(cd_base, attrs)? else {
+                return Err(XmlReadError::NonEmptyExpectedFor("OMATTR", now));
+            };
+            Ok(object)
+        })
+    }
+
+    fn omattr_or_var(
+        &mut self,
+        cd_base: &str,
+        attrs: Vec<super::Attr<'s, O>>,
+    ) -> Result<Option<(Cow<'s, str>, Vec<super::Attr<'s, O>>)>, XmlReadError<O::Err>> {
+        let now = self.now();
+        let next = self.next()?;
+        match next.as_ref() {
+            Event::End(_) => {
+                drop(next);
+                Ok(None)
+            }
+            Event::Start(e) if e.local_name().as_ref() == b"OMATTR" => {
+                let a = next
+                    .get_attr_from_start("cdbase")
+                    .map(cowfrombytes)
+                    .transpose()?;
+                let cd_base = a.as_deref().unwrap_or(cd_base);
+                drop(next);
+                self.omattr_i(cd_base, attrs, |nslf, attrs| {
+                    nslf.omattr_or_var(cd_base, attrs)
+                })
+            }
+            Event::Empty(e) if e.local_name().as_ref() == b"OMV" => {
+                let Some(cow) = next.get_attr_from_empty("name") else {
+                    return Err(XmlReadError::ExpectedAttribute("name"));
+                };
+                let s = tryfrombytes(cow)?;
+                Ok(Some((s, attrs)))
+            }
+            _ => Err(XmlReadError::UnexpectedTag(now)),
+        }
+    }
+
     fn ombind(
         &mut self,
         cd_base: &str,
         off: u64,
+        attrs: Vec<super::Attr<'s, O>>,
     ) -> Result<Either<O, OM<'s, O>>, XmlReadError<O::Err>> {
-        let ControlFlow::Break(head) = self.handle_next(cd_base)? else {
+        let ControlFlow::Break(head) = self.handle_next(cd_base, Vec::new())? else {
             return Err(XmlReadError::NonEmptyExpectedFor("OMBIND", off));
         };
 
@@ -642,35 +839,19 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
         let now = self.now();
         let next = self.next()?;
         match next.as_ref() {
-            Event::Empty(_) => {
+            Event::Empty(e) if e.local_name().as_ref() == b"OMBVAR" => {
                 drop(next);
             }
             Event::Start(e) if e.local_name().as_ref() == b"OMBVAR" => {
                 drop(next);
-                loop {
-                    let now = self.now();
-                    let next = self.next()?;
-                    match next.as_ref() {
-                        Event::End(_) => {
-                            drop(next);
-                            break;
-                        }
-                        Event::Empty(e) if e.local_name().as_ref() == b"OMV" => {
-                            let Some(cow) = next.get_attr_from_empty("name") else {
-                                return Err(XmlReadError::ExpectedAttribute("name"));
-                            };
-                            let s = tryfrombytes(cow)?;
-                            context.push(s);
-                            drop(next);
-                        }
-                        _ => return Err(XmlReadError::UnexpectedTag(now)),
-                    }
+                while let Some(e) = self.omattr_or_var(cd_base, Vec::new())? {
+                    context.push(e);
                 }
             }
             _ => return Err(XmlReadError::UnexpectedTag(now)),
         }
 
-        let ControlFlow::Break(body) = self.handle_next(cd_base)? else {
+        let ControlFlow::Break(body) = self.handle_next(cd_base, Vec::new())? else {
             return Err(XmlReadError::NonEmptyExpectedFor("OMBIND", now));
         };
         if !matches!(self.next()?.as_ref(), Event::End(_)) {
@@ -682,6 +863,7 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
                 head: head.map_right(Box::new),
                 context,
                 body: body.map_right(Box::new),
+                attrs,
             },
             cd_base,
         )
