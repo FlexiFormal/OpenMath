@@ -9,10 +9,12 @@ pub(crate) mod serde_impl;
 pub(crate) mod xml;
 use std::borrow::Cow;
 
-use crate::{OMKind, either::Either};
+use crate::{OMKind, OMMaybeForeign, either::Either};
 use either::Either::Left;
 #[cfg(feature = "serde")]
 pub use serde_impl::OMFromSerde;
+
+type OMAttr<'o, I> = crate::Attr<'o, Either<I, crate::OMMaybeForeign<'o, OM<'o, I>>>>;
 
 #[allow(rustdoc::redundant_explicit_links)]
 /**  Trait for types that can be deserialized from OpenMath objects.
@@ -316,7 +318,7 @@ pub enum OM<'de, I: OMDeserializable<'de>> {
     </div> */
     OMI {
         int: crate::Int<'de>,
-        attrs: Vec<Attr<'de, I>>,
+        attrs: Vec<OMAttr<'de, I>>,
     } = OMKind::OMI as _,
 
     /** <div class="openmath">
@@ -324,7 +326,7 @@ pub enum OM<'de, I: OMDeserializable<'de>> {
     </div> */
     OMF {
         float: f64,
-        attrs: Vec<Attr<'de, I>>,
+        attrs: Vec<OMAttr<'de, I>>,
     } = OMKind::OMF as _,
 
     /** <div class="openmath">
@@ -332,7 +334,7 @@ pub enum OM<'de, I: OMDeserializable<'de>> {
     </div> */
     OMSTR {
         string: Cow<'de, str>,
-        attrs: Vec<Attr<'de, I>>,
+        attrs: Vec<OMAttr<'de, I>>,
     } = OMKind::OMSTR as _,
 
     /** <div class="openmath">
@@ -340,7 +342,7 @@ pub enum OM<'de, I: OMDeserializable<'de>> {
     </div> */
     OMB {
         bytes: Cow<'de, [u8]>,
-        attrs: Vec<Attr<'de, I>>,
+        attrs: Vec<OMAttr<'de, I>>,
     } = OMKind::OMB as _,
 
     ///<div class="openmath">
@@ -353,7 +355,7 @@ pub enum OM<'de, I: OMDeserializable<'de>> {
     ///(Note: We do not enforce that names are valid XML names;)
     OMV {
         name: Cow<'de, str>,
-        attrs: Vec<Attr<'de, I>>,
+        attrs: Vec<OMAttr<'de, I>>,
     } = OMKind::OMV as _,
 
     ///<div class="openmath">
@@ -377,7 +379,7 @@ pub enum OM<'de, I: OMDeserializable<'de>> {
     OMS {
         cd_name: Cow<'de, str>,
         name: Cow<'de, str>,
-        attrs: Vec<Attr<'de, I>>,
+        attrs: Vec<OMAttr<'de, I>>,
     } = OMKind::OMS as _,
 
     /** <div class="openmath">
@@ -388,7 +390,7 @@ pub enum OM<'de, I: OMDeserializable<'de>> {
     OMA {
         head: Either<I, Box<Self>>,
         args: Vec<Either<I, Self>>,
-        attrs: Vec<Attr<'de, I>>,
+        attrs: Vec<OMAttr<'de, I>>,
     } = OMKind::OMA as _,
 
     /** <div class="openmath">
@@ -400,9 +402,9 @@ pub enum OM<'de, I: OMDeserializable<'de>> {
     </div> */
     OMBIND {
         head: Either<I, Box<Self>>,
-        context: Vec<(Cow<'de, str>, Vec<Attr<'de, I>>)>,
+        context: Vec<(Cow<'de, str>, Vec<OMAttr<'de, I>>)>,
         body: Either<I, Box<Self>>,
-        attrs: Vec<Attr<'de, I>>,
+        attrs: Vec<OMAttr<'de, I>>,
     } = OMKind::OMBIND as _,
 
     /** <div class="openmath">
@@ -413,32 +415,9 @@ pub enum OM<'de, I: OMDeserializable<'de>> {
         cd_base: Option<Cow<'de, str>>,
         cd_name: Cow<'de, str>,
         name: Cow<'de, str>,
-        args: Vec<Either<I, OMForeign<'de, I>>>,
-        attrs: Vec<Attr<'de, I>>,
+        args: Vec<Either<I, OMMaybeForeign<'de, Self>>>,
+        attrs: Vec<OMAttr<'de, I>>,
     } = OMKind::OME as _,
-}
-
-#[derive(Debug, Clone)]
-pub struct Attr<'de, I: OMDeserializable<'de>> {
-    pub cd_base: Option<Cow<'de, str>>,
-    pub cd_name: Cow<'de, str>,
-    pub name: Cow<'de, str>,
-    pub value: Either<I, OMForeign<'de, I>>,
-}
-
-#[derive(Debug, Clone)]
-pub enum OMForeign<'de, I: OMDeserializable<'de>> {
-    OM(OM<'de, I>),
-
-    /** <div class="openmath">
-    If $A$ is not an OpenMath object, then $\mathrm{foreign}(A)$ is an OpenMath foreign object.
-    An OpenMath foreign object may optionally have an encoding field which describes how its
-    contents should be interpreted.
-    </div> */
-    Foreign {
-        encoding: Option<Cow<'de, str>>,
-        value: Cow<'de, str>,
-    },
 }
 
 impl<'d> OMDeserializable<'d> for crate::Int<'d> {

@@ -217,7 +217,11 @@ pub trait OMSerializable {
     }
 }
 
-pub enum OMForeignSerializable<'f, OM: OMSerializable = String, F: std::fmt::Display = String> {
+pub enum OMForeignSerializable<
+    'f,
+    OM: OMSerializable = String,
+    F: std::fmt::Display + ?Sized = String,
+> {
     OM(&'f OM),
     Foreign {
         encoding: Option<&'f str>,
@@ -225,7 +229,16 @@ pub enum OMForeignSerializable<'f, OM: OMSerializable = String, F: std::fmt::Dis
     },
 }
 
-pub struct OMAttrSerializable<'f, OM: OMSerializable = String, F: std::fmt::Display = String> {
+/*pub trait OMAttr {
+    fn symbol(&self) -> &impl AsOMS;
+    fn value(&self) -> &impl OMOrForeign;
+}*/
+
+pub struct OMAttrSerializable<
+    'f,
+    OM: OMSerializable = String,
+    F: std::fmt::Display + ?Sized = String,
+> {
     pub cdbase: Option<Cow<'f, str>>,
     pub cd: Cow<'f, str>,
     pub name: Cow<'f, str>,
@@ -236,7 +249,7 @@ pub struct OMAttrSerializable<'f, OM: OMSerializable = String, F: std::fmt::Disp
 ///
 /// This allows `&T` to be serializable whenever `T` is serializable,
 /// which is convenient for method chaining and generic contexts.
-impl<T: OMSerializable> OMSerializable for &T {
+impl<T: OMSerializable + ?Sized> OMSerializable for &T {
     #[inline]
     fn as_openmath<'s, S: OMSerializer<'s>>(&self, serializer: S) -> Result<S::Ok, S::Err> {
         T::as_openmath(self, serializer)
@@ -465,9 +478,9 @@ pub trait OMSerializer<'s>: Sized {
     }
     ```
     */
-    fn oma<'a, T: OMSerializable + 'a, I: IntoIterator<Item = &'a T>>(
+    fn oma<T: OMSerializable, I: IntoIterator<Item = T>>(
         self,
-        head: &'a impl OMSerializable,
+        head: &impl OMSerializable,
         args: I,
     ) -> Result<Self::Ok, Self::Err>
     where
@@ -505,12 +518,13 @@ pub trait OMSerializer<'s>: Sized {
     fn ome<
         'a,
         T: OMSerializable + 'a,
-        D: std::fmt::Display + 'a,
+        D: std::fmt::Display + 'a + ?Sized,
         I: IntoIterator<Item = OMForeignSerializable<'a, T, D>>,
     >(
         self,
-        cd_name: &impl std::fmt::Display,
-        name: &impl std::fmt::Display,
+        error: &impl AsOMS,
+        //cd_name: &impl std::fmt::Display,
+        //name: &impl std::fmt::Display,
         args: I,
     ) -> Result<Self::Ok, Self::Err>
     where
@@ -613,6 +627,34 @@ impl<O: OMSerializable> std::fmt::Display for OMObject<'_, O> {
     }
 }
 
+/// trait for things that can be serialized as an [OMS](crate::OMKind::OMS); i.e. things
+/// that have a URI.
+pub trait AsOMS {
+    /// The cdbase of this URI. `current_cdbase` is the current namespace during
+    /// serialization. This allows to return `None` if the current cdbase is already
+    /// this one anyway
+    fn cdbase(&self, _current_cdbase: &str) -> Option<Cow<'_, str>> {
+        None
+    }
+    /// The cd of this URI
+    fn cd(&self) -> &impl std::fmt::Display;
+    /// The name of the symbol represented by this URI
+    fn name(&self) -> &impl std::fmt::Display;
+    fn as_oms(&self) -> impl OMSerializable {
+        struct AsOM<'a, A: AsOMS + ?Sized>(&'a A);
+        impl<A: AsOMS + ?Sized> OMSerializable for AsOM<'_, A> {
+            fn as_openmath<'s, S: OMSerializer<'s>>(&self, serializer: S) -> Result<S::Ok, S::Err> {
+                if let Some(b) = self.0.cdbase(serializer.current_cd_base()) {
+                    serializer.with_cd_base(&b)?.oms(self.0.cd(), self.0.name())
+                } else {
+                    serializer.oms(self.0.cd(), self.0.name())
+                }
+            }
+        }
+        AsOM(self)
+    }
+}
+
 /// Convenience structure for producing OMS triples in [as_openmath](OMSerializable::as_openmath)
 ///
 /// # Examples
@@ -632,25 +674,30 @@ where
     Name: std::fmt::Display + ?Sized,
 {
     /// The content dictionary base
-    pub cd_base: Option<&'s str>,
+    pub cdbase: Option<&'s str>,
     /// The name of the content dictionary
     pub cd: &'s CD,
     /// The name of the symbol
     pub name: &'s Name,
 }
 
-impl<CD, Name> OMSerializable for Uri<'_, CD, Name>
+impl<CD, Name> AsOMS for Uri<'_, CD, Name>
 where
     CD: std::fmt::Display + ?Sized,
     Name: std::fmt::Display + ?Sized,
 {
+    fn cdbase(&self, current_cdbase: &str) -> Option<Cow<'_, str>> {
+        self.cdbase
+            .map(Cow::Borrowed)
+            .and_then(|s| if s == current_cdbase { None } else { Some(s) })
+    }
     #[inline]
-    fn as_openmath<'s, S: OMSerializer<'s>>(&self, serializer: S) -> Result<S::Ok, S::Err> {
-        if let Some(base) = self.cd_base {
-            serializer.with_cd_base(base)?.oms(&self.cd, &self.name)
-        } else {
-            serializer.oms(&self.cd, &self.name)
-        }
+    fn cd(&self) -> &impl std::fmt::Display {
+        &self.cd
+    }
+    #[inline]
+    fn name(&self) -> &impl std::fmt::Display {
+        &self.name
     }
 }
 
@@ -717,13 +764,6 @@ impl OMSerializable for Vec<u8> {
     #[inline]
     fn as_openmath<'s, S: OMSerializer<'s>>(&self, serializer: S) -> Result<S::Ok, S::Err> {
         serializer.omb(self.iter().copied())
-    }
-}
-
-impl OMSerializable for &str {
-    #[inline]
-    fn as_openmath<'s, S: OMSerializer<'s>>(&self, serializer: S) -> Result<S::Ok, S::Err> {
-        serializer.omstr(self)
     }
 }
 
@@ -806,7 +846,7 @@ struct DisplaySerializer<'f1, 'f2> {
     current_ns: &'f1 str,
 }
 impl DisplaySerializer<'_, '_> {
-    fn rec(&mut self, o: &impl OMSerializable) -> Result<(), DisplayErr> {
+    fn rec(&mut self, o: impl OMSerializable) -> Result<(), DisplayErr> {
         let s = if let Some(next) = o.cd_base() {
             if self.current_ns == next {
                 DisplaySerializer {
@@ -830,7 +870,7 @@ impl DisplaySerializer<'_, '_> {
         };
         o.as_openmath(s)
     }
-    fn foreign<O: OMSerializable, D: std::fmt::Display>(
+    fn foreign<O: OMSerializable, D: std::fmt::Display + ?Sized>(
         &mut self,
         o: &OMForeignSerializable<'_, O, D>,
     ) -> Result<(), DisplayErr> {
@@ -913,9 +953,9 @@ impl<'f1, 'f2> OMSerializer<'f1> for DisplaySerializer<'f1, 'f2> {
         write!(self.f, "OMS({s}{t}{cd_name}#{name})").map_err(Into::into)
     }
 
-    fn oma<'s, T: OMSerializable + 's, I: IntoIterator<Item = &'s T>>(
+    fn oma<T: OMSerializable, I: IntoIterator<Item = T>>(
         mut self,
-        head: &'s impl OMSerializable,
+        head: &impl OMSerializable,
         args: I,
     ) -> Result<Self::Ok, Self::Err>
     where
@@ -944,12 +984,11 @@ impl<'f1, 'f2> OMSerializer<'f1> for DisplaySerializer<'f1, 'f2> {
     fn ome<
         'a,
         T: OMSerializable + 'a,
-        D: std::fmt::Display + 'a,
+        D: std::fmt::Display + 'a + ?Sized,
         I: IntoIterator<Item = OMForeignSerializable<'a, T, D>>,
     >(
         mut self,
-        cd_name: &impl std::fmt::Display,
-        name: &impl std::fmt::Display,
+        error: &impl AsOMS,
         args: I,
     ) -> Result<Self::Ok, Self::Err>
     where
@@ -957,7 +996,7 @@ impl<'f1, 'f2> OMSerializer<'f1> for DisplaySerializer<'f1, 'f2> {
     {
         let (s, t) = self.next_ns.map_or(("", ""), |s| (s, "/"));
         let mut args = args.into_iter();
-        write!(self.f, "OME{s}{t}{cd_name}#{name}(")?;
+        write!(self.f, "OME{s}{t}{}#{}(", error.cd(), error.name())?;
         if let Some(next) = args.next() {
             self.foreign(&next)?;
             for a in args {
@@ -1078,7 +1117,7 @@ pub mod testdoc {
     }
     impl Point {
         const URI: Uri<'_> = Uri {
-            cd_base: Some("http://example.org"),
+            cdbase: Some("http://example.org"),
             cd: "geometry1",
             name: "point",
         };
@@ -1086,7 +1125,7 @@ pub mod testdoc {
     impl OMSerializable for Point {
         fn as_openmath<'s, S: OMSerializer<'s>>(&self, serializer: S) -> Result<S::Ok, S::Err> {
             // Represent as OMA: point(x, y)
-            serializer.oma(&Self::URI, [&self.x, &self.y])
+            serializer.oma(&Self::URI.as_oms(), [&self.x, &self.y])
         }
     }
 
@@ -1096,17 +1135,17 @@ pub mod testdoc {
     }
     impl<const LEN: usize, O> Lambda<'_, LEN, O> {
         const URI: Uri<'static> = Uri {
-            cd_base: Some("http://openmath.org"),
+            cdbase: Some("http://openmath.org"),
             cd: "fns1",
             name: "lambda",
         };
     }
     impl<const LEN: usize, O: OMSerializable> OMSerializable for Lambda<'_, LEN, O> {
         fn cd_base(&self) -> Option<&str> {
-            Self::URI.cd_base
+            Self::URI.cdbase
         }
         fn as_openmath<'s, S: OMSerializer<'s>>(&self, serializer: S) -> Result<S::Ok, S::Err> {
-            serializer.ombind(&Self::URI, self.vars.vars(), &self.body)
+            serializer.ombind(&Self::URI.as_oms(), self.vars.vars(), &self.body)
         }
     }
 
@@ -1204,10 +1243,11 @@ mod tests {
     #[test]
     fn test_oms_serialization() {
         let result = Uri {
-            cd_base: Some("http://test.org"),
+            cdbase: Some("http://test.org"),
             cd: "test",
             name: "symbol",
         }
+        .as_oms()
         .openmath_display()
         .to_string();
         assert_eq!(result, "OMS(http://test.org/test#symbol)");
@@ -1216,10 +1256,11 @@ mod tests {
     #[test]
     fn test_oms_serialization_xml() {
         let result = Uri {
-            cd_base: Some("http://test.org"),
+            cdbase: Some("http://test.org"),
             cd: "test",
             name: "symbol",
         }
+        .as_oms()
         .xml(true)
         .to_string();
         assert_eq!(

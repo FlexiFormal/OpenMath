@@ -18,7 +18,7 @@
 //! ```
 use crate::{
     OMSerializable,
-    ser::{OMForeignSerializable, OMSerializer},
+    ser::{AsOMS, OMForeignSerializable, OMSerializer},
 };
 use serde::{
     Serializer,
@@ -72,16 +72,16 @@ impl<O: OMSerializable + ?Sized> serde::Serialize for super::OMObject<'_, O> {
 /// # }
 /// ```
 pub struct SerdeSerializer<'s, OM>(
-    pub(crate) &'s OM,
+    pub(crate) OM,
     pub(crate) Option<&'s str>,
     pub(crate) &'s str,
 )
 where
-    OM: crate::OMSerializable + ?Sized;
+    OM: crate::OMSerializable;
 
-pub enum ForeignSerializer<'s, OM, D: std::fmt::Display>
+pub enum ForeignSerializer<'s, OM, D: std::fmt::Display + ?Sized>
 where
-    OM: crate::OMSerializable + ?Sized,
+    OM: crate::OMSerializable,
 {
     O(SerdeSerializer<'s, OM>),
     F {
@@ -89,7 +89,7 @@ where
         value: &'s D,
     },
 }
-impl<OM: crate::OMSerializable + ?Sized, D: std::fmt::Display> ::serde::Serialize
+impl<OM: crate::OMSerializable, D: std::fmt::Display + ?Sized> ::serde::Serialize
     for ForeignSerializer<'_, OM, D>
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -115,7 +115,7 @@ impl<OM: crate::OMSerializable + ?Sized, D: std::fmt::Display> ::serde::Serializ
     }
 }
 
-impl<OM: crate::OMSerializable + ?Sized> ::serde::Serialize for SerdeSerializer<'_, OM> {
+impl<OM: crate::OMSerializable> ::serde::Serialize for SerdeSerializer<'_, OM> {
     #[inline]
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -241,12 +241,11 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
     fn ome<
         'a,
         T: OMSerializable + 'a,
-        D: std::fmt::Display + 'a,
+        D: std::fmt::Display + 'a + ?Sized,
         I: IntoIterator<Item = super::OMForeignSerializable<'a, T, D>>,
     >(
         mut self,
-        cd_name: &impl std::fmt::Display,
-        name: &impl std::fmt::Display,
+        error: &impl super::AsOMS,
         args: I,
     ) -> Result<Self::Ok, Self::Err>
     where
@@ -271,12 +270,10 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
             struc.skip_field("cdbase")?;
         }
 
-        let uri = super::Uri {
-            cd_base: None,
-            cd: cd_name,
-            name,
-        };
-        struc.serialize_field("error", &SerdeSerializer(&uri, None, self.current_ns))?;
+        struc.serialize_field(
+            "error",
+            &SerdeSerializer(&error.as_oms(), None, self.current_ns),
+        )?;
         if args.len() > 0 {
             struc.serialize_field(
                 "arguments",
@@ -295,9 +292,9 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
         struc.end()
     }
 
-    fn oma<'a, T: OMSerializable + 'a, I: IntoIterator<Item = &'a T>>(
+    fn oma<T: OMSerializable, I: IntoIterator<Item = T>>(
         mut self,
-        head: &'a impl OMSerializable,
+        head: &impl OMSerializable,
         args: I,
     ) -> Result<Self::Ok, Self::Err>
     where
@@ -505,10 +502,11 @@ impl<'de, T: OMSerializable + 'de, D: std::fmt::Display + 'de> serde::Serialize
         let mut tup = serializer.serialize_tuple(2)?;
         tup.serialize_element(&SerdeSerializer(
             &super::Uri {
-                cd_base: self.attr.cdbase.as_deref(),
+                cdbase: self.attr.cdbase.as_deref(),
                 cd: self.attr.cd.as_ref(),
                 name: self.attr.name.as_ref(),
-            },
+            }
+            .as_oms(),
             None,
             self.ns,
         ))?;

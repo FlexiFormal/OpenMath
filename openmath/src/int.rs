@@ -34,7 +34,7 @@ use std::borrow::Cow;
 /// ```
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(transparent))]
-#[derive(PartialEq, Eq, Debug, Clone, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, Debug, Clone, PartialOrd, Ord, Hash)]
 pub struct Int<'l>(pub(crate) I<'l>);
 impl std::fmt::Display for Int<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -49,7 +49,7 @@ impl std::fmt::Display for Int<'_> {
 ///
 /// This enum distinguishes between small integers (stored as `i128`) and
 /// large integers (stored as decimal strings).
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum I<'l> {
     /// Small integer that fits in `i128`
     Stack(i128),

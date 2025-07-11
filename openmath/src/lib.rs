@@ -6,6 +6,8 @@
 #![cfg_attr(doc,doc = document_features::document_features!())]
 pub mod ser;
 
+use std::borrow::Cow;
+
 pub use ser::OMSerializable;
 pub mod de;
 pub use de::{OM, OMDeserializable};
@@ -14,6 +16,8 @@ mod int;
 /// reexported for convenience
 pub use either;
 pub use int::Int;
+
+use crate::ser::{AsOMS, OMForeignSerializable};
 
 /// The base URI of official OᴘᴇɴMᴀᴛʜ dictionaries (`http://www.openmath.org/cd`)
 pub static OPENMATH_BASE_URI: std::sync::LazyLock<url::Url> = std::sync::LazyLock::new(||
@@ -155,7 +159,6 @@ omkinds! {
     OMR = 11,
 }
 
-/*
 /// Enum representing all possible OᴘᴇɴMᴀᴛʜ objects.
 ///
 /// This enum encompasses the complete OᴘᴇɴMᴀᴛʜ object model, providing variants
@@ -174,33 +177,41 @@ omkinds! {
 /// Note that we do not implement the `OMATTR` case; that's because
 /// we use [`OpenMathObject`] instead of [`OpenMath`], which has a
 /// (possibly empty) field [attrs](OpenMathObject::attrs) for attributions.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(u8)]
-pub enum OMExpr<'de, Rec, Arg, Arr = Cow<'de, [u8]>, Str = &'de str>
-where
-    Arr: de::Bytes<'de>,
-    Str: de::StringLike<'de>,
-{
+pub enum OMExpr<'om> {
     /** <div class="openmath">
     Integers in the mathematical sense, with no predefined range.
     They are “infinite precision” integers (also called “bignums” in computer algebra).
     </div> */
-    OMI(Int<'de>) = OMKind::OMI as _,
+    OMI {
+        int: Int<'om>,
+        attributes: Vec<Attr<'om, OMMaybeForeign<'om, Self>>>,
+    } = OMKind::OMI as _,
 
     /** <div class="openmath">
     Double precision floating-point numbers following the IEEE 754-1985 standard.
     </div> */
-    OMF(ordered_float::OrderedFloat<f64>) = OMKind::OMF as _,
+    OMF {
+        float: ordered_float::OrderedFloat<f64>,
+        attributes: Vec<Attr<'om, OMMaybeForeign<'om, Self>>>,
+    } = OMKind::OMF as _,
 
     /** <div class="openmath">
     A Unicode Character string. This also corresponds to “characters” in XML.
     </div> */
-    OMSTR(Str) = OMKind::OMSTR as _,
+    OMSTR {
+        string: Cow<'om, str>,
+        attributes: Vec<Attr<'om, OMMaybeForeign<'om, Self>>>,
+    } = OMKind::OMSTR as _,
 
     /** <div class="openmath">
     A sequence of bytes.
     </div> */
-    OMB(Arr) = OMKind::OMB as _,
+    OMB {
+        bytes: Cow<'om, [u8]>,
+        attributes: Vec<Attr<'om, OMMaybeForeign<'om, Self>>>,
+    } = OMKind::OMB as _,
 
     ///<div class="openmath">
     ///
@@ -210,7 +221,10 @@ where
     ///</div>
     ///
     ///(Note: We do not enforce that names are valid XML names;)
-    OMV(Str) = OMKind::OMV as _,
+    OMV {
+        name: Cow<'om, str>,
+        attributes: Vec<Attr<'om, OMMaybeForeign<'om, Self>>>,
+    } = OMKind::OMV as _,
 
     /** <div class="openmath">
     A Symbol encodes three fields of information, a symbol name, a Content Dictionary name,
@@ -226,9 +240,10 @@ where
     OpenMath object. The possible roles are described in Section 2.1.4.
     </div> */
     OMS {
-        cd: Str,
-        name: Str,
-        cd_base: Option<Str>,
+        cd: Cow<'om, str>,
+        name: Cow<'om, str>,
+        cd_base: Option<Cow<'om, str>>,
+        attributes: Vec<Attr<'om, OMMaybeForeign<'om, Self>>>,
     } = OMKind::OMS as _,
 
     /** <div class="openmath">
@@ -236,17 +251,22 @@ where
     $\mathrm{application}(A_1,...,A_n)$ is an OpenMath application object.
     We call $A_1$ the function and $A_2$ to $A_n$ the arguments.
     </div> */
-    OMA { applicant: Rec, arguments: Vec<Arg> } = OMKind::OMA as _,
+    OMA {
+        applicant: Box<Self>,
+        arguments: Vec<Self>,
+        attributes: Vec<Attr<'om, OMMaybeForeign<'om, Self>>>,
+    } = OMKind::OMA as _,
 
     /** <div class="openmath">
     If $S$ is an OpenMath symbol and $A_1,...,A_n\;(n\geq0)$ are OpenMath objects or
     derived OpenMath objects, then $\mathrm{error}(S,A_1,...,A_n)$ is an OpenMath error object.
     </div> */
     OME {
-        cd: Str,
-        name: Str,
-        cd_base: Option<Str>,
-        arguments: Vec<OMOrForeign<'de, Rec, Arg, Arr, Str>>,
+        cd: Cow<'om, str>,
+        name: Cow<'om, str>,
+        cdbase: Option<Cow<'om, str>>,
+        arguments: Vec<OMMaybeForeign<'om, Self>>,
+        attributes: Vec<Attr<'om, OMMaybeForeign<'om, Self>>>,
     } = OMKind::OME as _,
 
     /** <div class="openmath">
@@ -257,146 +277,125 @@ where
     $C$ is called the body of the binding object above.
     </div> */
     OMBIND {
-        binder: Rec,
-        variables: Vec<BoundVariable<'de, Rec, Arg, Arr, Str>>,
-        object: Rec,
+        binder: Box<Self>,
+        variables: Vec<BoundVariable<'om>>,
+        object: Box<Self>,
+        attributes: Vec<Attr<'om, OMMaybeForeign<'om, Self>>>,
     } = OMKind::OMBIND as _,
 }
 
-impl<'de, Rec, Arg, Arr, Str> OMExpr<'de, Rec, Arg, Arr, Str>
-where
-    Arr: de::Bytes<'de>,
-    Str: de::StringLike<'de>,
-{
-    /// The [`OpenMathKind`] associated with this object
-    ///
-    //    /// ### Examples
-    //    ///```
-    //    /// use openmath::*;
-    //    /// let obj = OMObject(OpenMath::OMI(42.into()).into());
-    //    /// assert_eq!(obj.0.kind(),OpenMathKind::OMI);
-    //    ///```
-    pub fn kind(&self) -> OMKind {
-        // SAFETY: Both types have #[repr(u8)] and all of Self's discriminant
-        // values are OpenMathKind values.
-        unsafe {
-            let b = *<*const _>::from(self).cast::<u8>();
-            std::mem::transmute(b)
-        }
-    }
+/// A bound variable in an [`OMBIND`](OMExpr::OMBIND)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct BoundVariable<'om> {
+    name: Cow<'om, str>,
+    attributes: Vec<Attr<'om, OMMaybeForeign<'om, OMExpr<'om>>>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OMObjectInner<'de, Rec, Arg, Arr = Cow<'de, [u8]>, Str = &'de str>
-where
-    Arr: de::Bytes<'de>,
-    Str: de::StringLike<'de>,
-{
-    pub object: OMExpr<'de, Rec, Arg, Arr, Str>,
-    pub attrs: Vec<(Uri<'de>, OMOrForeign<'de, Rec, Arg, Arr, Str>)>,
+/// An attribute in an [`OMATTR`](OMKind::OMATTR)
+///
+/// Generic, so it can be reused in [OM](de::OM)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Attr<'o, I> {
+    pub cdbase: Option<Cow<'o, str>>,
+    pub cd: Cow<'o, str>,
+    pub name: Cow<'o, str>,
+    pub value: I,
 }
 
-impl<'de, Rec, Arg, Arr, Str> From<OMExpr<'de, Rec, Arg, Arr, Str>>
-    for OMObjectInner<'de, Rec, Arg, Arr, Str>
-where
-    Arr: de::Bytes<'de>,
-    Str: de::StringLike<'de>,
-{
-    #[inline]
-    fn from(object: OMExpr<'de, Rec, Arg, Arr, Str>) -> Self {
-        Self {
-            object,
-            attrs: Vec::new(),
-        }
-    }
-}
+/// Either an [OpenMath Expression](OMExpr) or an [`OMFOREIGN`](OMKind::OMFOREIGN).
+///
+/// Generic, so it can be reused in [OM](de::OM)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum OMMaybeForeign<'o, I> {
+    // An OMExpr
+    OM(I),
 
-impl<'de, Rec, Arg, Arr, Str> std::ops::Deref for OMObjectInner<'de, Rec, Arg, Arr, Str>
-where
-    Arr: de::Bytes<'de>,
-    Str: de::StringLike<'de>,
-{
-    type Target = OMExpr<'de, Rec, Arg, Arr, Str>;
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.object
-    }
+    /** <div class="openmath">
+    If $A$ is not an OpenMath object, then $\mathrm{foreign}(A)$ is an OpenMath foreign object.
+    An OpenMath foreign object may optionally have an encoding field which describes how its
+    contents should be interpreted.
+    </div> */
+    Foreign {
+        encoding: Option<Cow<'o, str>>,
+        value: Cow<'o, str>,
+    },
 }
-
-impl<'de, Rec, Arg, Arr, Str> OMObjectInner<'de, Rec, Arg, Arr, Str>
-where
-    Arr: de::Bytes<'de>,
-    Str: de::StringLike<'de>,
-{
-    pub fn kind(&self) -> OMKind {
-        if self.attrs.is_empty() {
-            self.object.kind()
-        } else {
-            OMKind::OMATTR
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BoundVariable<'de, Rec, Arg, Arr = Cow<'de, [u8]>, Str = &'de str>
-where
-    Arr: de::Bytes<'de>,
-    Str: de::StringLike<'de>,
-{
-    name: Str,
-    attributions: Vec<(Uri<'de>, OMOrForeign<'de, Rec, Arg, Arr, Str>)>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum OMOrForeign<'de, Rec, Arg, Arr = Cow<'de, [u8]>, Str = &'de str>
-where
-    Arr: de::Bytes<'de>,
-    Str: de::StringLike<'de>,
-{
-    OMForeign { encoding: Option<Str>, foreign: Str },
-    Object(OMObjectInner<'de, Rec, Arg, Arr, Str>),
-}
-impl<'de, Rec, Arg, Arr, Str> OMOrForeign<'de, Rec, Arg, Arr, Str>
-where
-    Arr: de::Bytes<'de>,
-    Str: de::StringLike<'de>,
-{
-    pub fn kind(&self) -> OMKind {
+impl<'o, I: OMSerializable> OMMaybeForeign<'o, I> {
+    fn as_serializable(&'o self) -> OMForeignSerializable<'o, I, str> {
         match self {
-            Self::OMForeign { .. } => OMKind::OMFOREIGN,
-            Self::Object(o) => o.kind(),
+            Self::OM(i) => OMForeignSerializable::OM(i),
+            Self::Foreign { encoding, value } => OMForeignSerializable::Foreign {
+                encoding: encoding.as_deref(),
+                value: &**value,
+            },
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OpenMathObject<Arr = Vec<u8>, Str = String>(
-    pub OMObjectInner<'static, Box<Self>, Self, Arr, Str>,
-)
-where
-    Arr: de::Bytes<'static>,
-    Str: de::StringLike<'static>;
-
-impl<Arr, Str> std::ops::Deref for OpenMathObject<Arr, Str>
-where
-    Arr: de::Bytes<'static>,
-    Str: de::StringLike<'static>,
-{
-    type Target = OMObjectInner<'static, Box<Self>, Self, Arr, Str>;
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
+impl ser::OMSerializable for OMExpr<'_> {
+    fn as_openmath<'s, S: ser::OMSerializer<'s>>(&self, serializer: S) -> Result<S::Ok, S::Err> {
+        //struct NoAttrs<'s,'o>(&'s OMExpr<'o>);
+        match self {
+            Self::OMI { int, attributes } if attributes.is_empty() => int.as_openmath(serializer),
+            Self::OMF { float, attributes } if attributes.is_empty() => {
+                float.0.as_openmath(serializer)
+            }
+            Self::OMSTR { string, attributes } if attributes.is_empty() => {
+                string.as_openmath(serializer)
+            }
+            Self::OMB { bytes, attributes } if attributes.is_empty() => {
+                bytes.as_openmath(serializer)
+            }
+            Self::OMV { name, attributes } if attributes.is_empty() => {
+                ser::Omv(name).as_openmath(serializer)
+            }
+            Self::OMS {
+                cd,
+                name,
+                cd_base,
+                attributes,
+            } if attributes.is_empty() => ser::Uri {
+                cdbase: cd_base.as_deref(),
+                name,
+                cd,
+            }
+            .as_oms()
+            .as_openmath(serializer),
+            Self::OMA {
+                applicant,
+                arguments,
+                attributes,
+            } if attributes.is_empty() => serializer.oma(&**applicant, arguments),
+            Self::OME {
+                cd,
+                name,
+                cdbase,
+                arguments,
+                attributes,
+            } if attributes.is_empty() => serializer.ome(
+                &ser::Uri {
+                    cdbase: cdbase.as_deref(),
+                    cd,
+                    name,
+                },
+                arguments.iter().map(OMMaybeForeign::as_serializable),
+            ),
+            /*
+            Self::OMBIND {
+                binder,
+                variables,
+                object,
+                attributes,
+            } if attributes.is_empty() => serializer.ombind(
+                binder,
+                variables
+                    .iter()
+                    .map(|v| (&v.name, v.attributes.iter().map(Attr::as_serializable))),
+                object,
+            ), */
+            _ => todo!(),
+        }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Uri<'de, Str = &'de str>
-where
-    Str: de::StringLike<'de>,
-{
-    pub cdbase: Option<Str>,
-    pub cd: Str,
-    pub name: Str,
-    pub phantom: &'de (),
-}
-*/
+//impl<'o> de::OMDeserializable<'o> for OMExpr<'o> {}

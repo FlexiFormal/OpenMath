@@ -22,7 +22,6 @@ OpenMath is a standard for representing mathematical expressions in a machine-re
 
 ## TODO
 
-- attributions via OMATTR (ser/de)
 - structure sharing via OMR
 - binary
 

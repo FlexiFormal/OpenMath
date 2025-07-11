@@ -120,7 +120,7 @@ impl<'f> XmlDisplayer<'_, 'f> {
         }
     }
 
-    fn omforeign<OM: OMSerializable, F: std::fmt::Display>(
+    fn omforeign<OM: OMSerializable, F: std::fmt::Display + ?Sized>(
         &mut self,
         a: &OMForeignSerializable<'_, OM, F>,
     ) -> Result<(), XmlWriteError> {
@@ -240,12 +240,11 @@ impl<'s, 'f> super::OMSerializer<'s> for XmlDisplayer<'s, 'f> {
     fn ome<
         'a,
         T: super::OMSerializable + 'a,
-        D: std::fmt::Display + 'a,
+        D: std::fmt::Display + 'a + ?Sized,
         I: IntoIterator<Item = super::OMForeignSerializable<'a, T, D>>,
     >(
         mut self,
-        cd_name: &impl std::fmt::Display,
-        name: &impl std::fmt::Display,
+        error: &impl super::AsOMS,
         args: I,
     ) -> Result<Self::Ok, Self::Err>
     where
@@ -261,7 +260,7 @@ impl<'s, 'f> super::OMSerializer<'s> for XmlDisplayer<'s, 'f> {
             self.w.write_str("<OME>")?;
         }
         self.indented(|nslf| {
-            nslf.clone().oms(cd_name, name)?;
+            error.as_oms().as_openmath(nslf.clone())?;
             for a in args {
                 nslf.omforeign(&a)?;
             }
@@ -271,9 +270,9 @@ impl<'s, 'f> super::OMSerializer<'s> for XmlDisplayer<'s, 'f> {
         self.w.write_str("</OME>")?;
         Ok(())
     }
-    fn oma<'a, T: super::OMSerializable + 'a, I: IntoIterator<Item = &'a T>>(
+    fn oma<T: super::OMSerializable, I: IntoIterator<Item = T>>(
         mut self,
-        head: &'a impl super::OMSerializable,
+        head: &impl super::OMSerializable,
         args: I,
     ) -> Result<Self::Ok, Self::Err>
     where
