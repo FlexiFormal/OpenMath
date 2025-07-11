@@ -29,7 +29,7 @@ impl<O: super::OMSerializable + ?Sized> std::fmt::Display for XmlDisplay<'_, O> 
         let displayer = XmlDisplayer {
             indent: if self.pretty { Some((false, 0)) } else { None },
             w: f,
-            next_ns: self.o.cd_base(),
+            next_ns: self.o.cdbase(),
             current_ns: crate::OPENMATH_BASE_URI.as_str(),
         };
         self.o.as_openmath(displayer).map_err(|_| std::fmt::Error)
@@ -49,7 +49,7 @@ impl<O: super::OMSerializable + ?Sized> std::fmt::Display for XmlObjDisplay<'_, 
             f.write_str(crate::XML_NAMESPACE)?;
             f.write_char('\"')?;
         }
-        let ns = if let Some(ns) = self.o.cd_base() {
+        let ns = if let Some(ns) = self.o.cdbase() {
             f.write_str("cdbase=\"")?;
             write!(DisplayEscaper(f), "{ns}")?;
             f.write_str("\"")?;
@@ -159,20 +159,20 @@ impl<'s, 'f> super::OMSerializer<'s> for XmlDisplayer<'s, 'f> {
     where
         's: 'ns;
     #[inline]
-    fn current_cd_base(&self) -> &str {
+    fn current_cdbase(&self) -> &str {
         self.next_ns.unwrap_or(self.current_ns)
     }
-    fn with_cd_base<'ns>(self, cd_base: &'ns str) -> Result<Self::SubSerializer<'ns>, Self::Err>
+    fn with_cdbase<'ns>(self, cdbase: &'ns str) -> Result<Self::SubSerializer<'ns>, Self::Err>
     where
         's: 'ns,
     {
-        if self.current_ns == cd_base {
+        if self.current_ns == cdbase {
             Ok(self)
         } else {
             Ok(XmlDisplayer {
                 indent: self.indent,
                 w: self.w,
-                next_ns: Some(cd_base),
+                next_ns: Some(cdbase),
                 current_ns: self.current_ns,
             })
         }

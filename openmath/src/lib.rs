@@ -6,7 +6,7 @@
 #![cfg_attr(doc,doc = document_features::document_features!())]
 pub mod ser;
 
-use std::borrow::Cow;
+use std::{borrow::Cow, convert::Infallible};
 
 pub use ser::OMSerializable;
 pub mod de;
@@ -179,7 +179,7 @@ omkinds! {
 /// (possibly empty) field [attrs](OpenMathObject::attrs) for attributions.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(u8)]
-pub enum OMExpr<'om> {
+pub enum OpenMath<'om> {
     /** <div class="openmath">
     Integers in the mathematical sense, with no predefined range.
     They are “infinite precision” integers (also called “bignums” in computer algebra).
@@ -242,7 +242,7 @@ pub enum OMExpr<'om> {
     OMS {
         cd: Cow<'om, str>,
         name: Cow<'om, str>,
-        cd_base: Option<Cow<'om, str>>,
+        cdbase: Option<Cow<'om, str>>,
         attributes: Vec<Attr<'om, OMMaybeForeign<'om, Self>>>,
     } = OMKind::OMS as _,
 
@@ -288,7 +288,7 @@ pub enum OMExpr<'om> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BoundVariable<'om> {
     name: Cow<'om, str>,
-    attributes: Vec<Attr<'om, OMMaybeForeign<'om, OMExpr<'om>>>>,
+    attributes: Vec<Attr<'om, OMMaybeForeign<'om, OpenMath<'om>>>>,
 }
 impl ser::BindVar for &BoundVariable<'_> {
     #[inline]
@@ -362,63 +362,187 @@ impl<I: ser::OMSerializable> ser::OMOrForeign for &OMMaybeForeign<'_, I> {
     }
 }
 
-impl ser::OMSerializable for OMExpr<'_> {
+impl ser::OMSerializable for OpenMath<'_> {
     fn as_openmath<'s, S: ser::OMSerializer<'s>>(&self, serializer: S) -> Result<S::Ok, S::Err> {
-        //struct NoAttrs<'s,'o>(&'s OMExpr<'o>);
+        struct NoAttrs<'s, 'o>(&'s OpenMath<'o>);
+        impl ser::OMSerializable for NoAttrs<'_, '_> {
+            fn as_openmath<'s, S: ser::OMSerializer<'s>>(
+                &self,
+                serializer: S,
+            ) -> Result<S::Ok, S::Err> {
+                match self.0 {
+                    OpenMath::OMI { int, .. } => int.as_openmath(serializer),
+                    OpenMath::OMF { float, .. } => float.0.as_openmath(serializer),
+                    OpenMath::OMSTR { string, .. } => string.as_openmath(serializer),
+                    OpenMath::OMB { bytes, .. } => bytes.as_openmath(serializer),
+                    OpenMath::OMV { name, .. } => ser::Omv(name).as_openmath(serializer),
+                    OpenMath::OMS {
+                        cd, name, cdbase, ..
+                    } => ser::Uri {
+                        cdbase: cdbase.as_deref(),
+                        name,
+                        cd,
+                    }
+                    .as_oms()
+                    .as_openmath(serializer),
+                    OpenMath::OMA {
+                        applicant,
+                        arguments,
+                        ..
+                    } => serializer.oma(&**applicant, arguments.iter()),
+                    OpenMath::OME {
+                        cd,
+                        name,
+                        cdbase,
+                        arguments,
+                        ..
+                    } => serializer.ome(
+                        &ser::Uri {
+                            cdbase: cdbase.as_deref(),
+                            cd,
+                            name,
+                        },
+                        arguments.iter(),
+                    ),
+                    OpenMath::OMBIND {
+                        binder,
+                        variables,
+                        object,
+                        ..
+                    } => serializer.ombind(&**binder, variables.iter(), &**object),
+                }
+            }
+        }
         match self {
-            Self::OMI { int, attributes } if attributes.is_empty() => int.as_openmath(serializer),
-            Self::OMF { float, attributes } if attributes.is_empty() => {
-                float.0.as_openmath(serializer)
+            Self::OMI { attributes, .. }
+            | Self::OMF { attributes, .. }
+            | Self::OMSTR { attributes, .. }
+            | Self::OMB { attributes, .. }
+            | Self::OMV { attributes, .. }
+            | Self::OMS { attributes, .. }
+            | Self::OMA { attributes, .. }
+            | Self::OME { attributes, .. }
+            | Self::OMBIND { attributes, .. }
+                if !attributes.is_empty() =>
+            {
+                serializer.omattr(attributes.iter(), NoAttrs(self))
             }
-            Self::OMSTR { string, attributes } if attributes.is_empty() => {
-                string.as_openmath(serializer)
-            }
-            Self::OMB { bytes, attributes } if attributes.is_empty() => {
-                bytes.as_openmath(serializer)
-            }
-            Self::OMV { name, attributes } if attributes.is_empty() => {
-                ser::Omv(name).as_openmath(serializer)
-            }
-            Self::OMS {
-                cd,
-                name,
-                cd_base,
-                attributes,
-            } if attributes.is_empty() => ser::Uri {
-                cdbase: cd_base.as_deref(),
-                name,
-                cd,
-            }
-            .as_oms()
-            .as_openmath(serializer),
-            Self::OMA {
-                applicant,
-                arguments,
-                attributes,
-            } if attributes.is_empty() => serializer.oma(&**applicant, arguments.iter()),
-            Self::OME {
-                cd,
-                name,
-                cdbase,
-                arguments,
-                attributes,
-            } if attributes.is_empty() => serializer.ome(
-                &ser::Uri {
-                    cdbase: cdbase.as_deref(),
-                    cd,
-                    name,
-                },
-                arguments.iter(),
-            ),
-            Self::OMBIND {
-                binder,
-                variables,
-                object,
-                attributes,
-            } if attributes.is_empty() => serializer.ombind(&**binder, variables.iter(), &**object),
-            _ => todo!(),
+            _ => NoAttrs(self).as_openmath(serializer),
         }
     }
 }
 
-//impl<'o> de::OMDeserializable<'o> for OMExpr<'o> {}
+impl<'o> de::OMDeserializable<'o> for OpenMath<'o> {
+    type Err = Infallible;
+    #[allow(clippy::too_many_lines)]
+    fn from_openmath(
+        om: OM<'o, Self>,
+        cdbase: &str,
+    ) -> Result<either::Either<Self, OM<'o, Self>>, Self::Err>
+    where
+        Self: Sized,
+    {
+        fn do_attrs<'o>(
+            attrs: Vec<de::OMAttr<'o, OpenMath<'o>>>,
+        ) -> Vec<Attr<'o, OMMaybeForeign<'o, OpenMath<'o>>>> {
+            attrs
+                .into_iter()
+                .map(|a| Attr {
+                    cdbase: a.cdbase,
+                    cd: a.cd,
+                    name: a.name,
+                    value: match a.value {
+                        either::Either::Left(a) => OMMaybeForeign::OM(a),
+                        either::Either::Right(OMMaybeForeign::Foreign { encoding, value }) => {
+                            OMMaybeForeign::Foreign { encoding, value }
+                        }
+                        either::Either::Right(OMMaybeForeign::OM(_)) => {
+                            unreachable!("by construction")
+                        }
+                    },
+                })
+                .collect()
+        }
+        Ok(either::Either::Left(match om {
+            OM::OMI { int, attrs } => Self::OMI {
+                int,
+                attributes: do_attrs(attrs),
+            },
+            OM::OMF { float, attrs } => Self::OMF {
+                float: float.into(),
+                attributes: do_attrs(attrs),
+            },
+            OM::OMSTR { string, attrs } => Self::OMSTR {
+                string,
+                attributes: do_attrs(attrs),
+            },
+            OM::OMB { bytes, attrs } => Self::OMB {
+                bytes,
+                attributes: do_attrs(attrs),
+            },
+            OM::OMV { name, attrs } => Self::OMV {
+                name,
+                attributes: do_attrs(attrs),
+            },
+            OM::OMS { cd, name, attrs } => Self::OMS {
+                cd,
+                name,
+                cdbase: Some(Cow::Owned(cdbase.to_string())),
+                attributes: do_attrs(attrs),
+            },
+            OM::OMA {
+                applicant,
+                arguments,
+                attrs,
+            } => Self::OMA {
+                applicant: Box::new(applicant.expect_left("by construction")),
+                arguments: arguments
+                    .into_iter()
+                    .map(|e| e.expect_left("by construction"))
+                    .collect(),
+                attributes: do_attrs(attrs),
+            },
+            OM::OMBIND {
+                binder,
+                variables,
+                object,
+                attrs,
+            } => Self::OMBIND {
+                binder: Box::new(binder.expect_left("by construction")),
+                variables: variables
+                    .into_iter()
+                    .map(|(name, a)| BoundVariable {
+                        name,
+                        attributes: do_attrs(a),
+                    })
+                    .collect(),
+                object: Box::new(object.expect_left("by construction")),
+                attributes: do_attrs(attrs),
+            },
+            OM::OME {
+                cdbase,
+                cd,
+                name,
+                arguments,
+                attrs,
+            } => Self::OME {
+                cd,
+                name,
+                cdbase,
+                arguments: arguments
+                    .into_iter()
+                    .map(|e| match e {
+                        either::Either::Left(e) => OMMaybeForeign::OM(e),
+                        either::Either::Right(OMMaybeForeign::Foreign { encoding, value }) => {
+                            OMMaybeForeign::Foreign { encoding, value }
+                        }
+                        either::Either::Right(OMMaybeForeign::OM(_)) => {
+                            unreachable!("by construction")
+                        }
+                    })
+                    .collect(),
+                attributes: do_attrs(attrs),
+            },
+        }))
+    }
+}

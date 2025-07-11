@@ -14,7 +14,7 @@ use either::Either::Left;
 #[cfg(feature = "serde")]
 pub use serde_impl::OMFromSerde;
 
-type OMAttr<'o, I> = crate::Attr<'o, Either<I, crate::OMMaybeForeign<'o, OM<'o, I>>>>;
+pub type OMAttr<'o, I> = crate::Attr<'o, Either<I, crate::OMMaybeForeign<'o, OM<'o, I>>>>;
 
 #[allow(rustdoc::redundant_explicit_links)]
 /**  Trait for types that can be deserialized from OpenMath objects.
@@ -68,7 +68,7 @@ impl<'d> OMDeserializable<'d> for SimplifiedInt {
     type Err = String;
     fn from_openmath(
         om: OM<'d, Self>,
-        cd_base:&str
+        cdbase:&str
     ) -> Result<Either<Self, OM<'d, Self>>, Self::Err>
     where
         Self: Sized,
@@ -84,24 +84,24 @@ impl<'d> OMDeserializable<'d> for SimplifiedInt {
                 }
             }
             // Addition or multiplication
-            OM::OMS { cd_name, name, attrs } if
-                cd_name == "arith1" &&
+            OM::OMS { cd, name, attrs } if
+                cd == "arith1" &&
                 (name == "plus" || name == "times") &&
-                cd_base == openmath::OPENMATH_BASE_URI.as_str() => {
+                cdbase == openmath::OPENMATH_BASE_URI.as_str() => {
                 // works, but without arguments, we can't do anything to it *yet*.
                 // => We send it back, so we can take care of it later, if it
                 // occurs as the head of an OMA expression
-                Ok(either::Right(OM::OMS { cd_name, name, attrs }))
+                Ok(either::Right(OM::OMS { cd, name, attrs }))
             }
             // some operator application to two arguments
             OM::OMA {
                 // still an open math expression:
-                head: either::Right(op),
-                mut args,
+                applicant: either::Right(op),
+                mut arguments,
                 attrs
-            } if args.iter().all(Either::is_left)
-                && args.len() == 2
-                && cd_base == openmath::OPENMATH_BASE_URI.as_str() => {
+            } if arguments.iter().all(Either::is_left)
+                && arguments.len() == 2
+                && cdbase == openmath::OPENMATH_BASE_URI.as_str() => {
                 // An OMA only ends up here, after both the head and all arguments
                 // were fed into this method.
                 // Since "plus" and "times" are the only values for
@@ -110,10 +110,10 @@ impl<'d> OMDeserializable<'d> for SimplifiedInt {
                     OM::OMS { name, .. } => name == "times",
                     _ => unreachable!(),
                 };
-                let Some(Either::Left(arg2)) = args.pop() else {
+                let Some(Either::Left(arg2)) = arguments.pop() else {
                     unreachable!()
                 };
-                let Some(Either::Left(arg1)) = args.pop() else {
+                let Some(Either::Left(arg1)) = arguments.pop() else {
                     unreachable!()
                 };
                 let value = if is_times {
@@ -184,7 +184,7 @@ pub trait OMDeserializable<'de>: std::fmt::Debug {
     #[allow(clippy::type_complexity)]
     fn from_openmath(
         om: OM<'de, Self>,
-        cd_base: &str,
+        cdbase: &str,
     ) -> Result<Either<Self, OM<'de, Self>>, Self::Err>
     where
         Self: Sized;
@@ -265,7 +265,7 @@ impl<'de, O: OMDeserializable<'de>> OMObject<'de, O> {
         type Err = &'static str;
         fn from_openmath(
             om: OM<'static, Self>,
-            _cd_base: &str,
+            _cdbase: &str,
         ) -> Result<Either<Self, OM<'static, Self>>, Self::Err>
         where
             Self: Sized,
@@ -378,7 +378,7 @@ pub enum OM<'de, I: OMDeserializable<'de>> {
     ///
     ///</div>
     OMS {
-        cd_name: Cow<'de, str>,
+        cd: Cow<'de, str>,
         name: Cow<'de, str>,
         attrs: Vec<OMAttr<'de, I>>,
     } = OMKind::OMS as _,
@@ -389,8 +389,8 @@ pub enum OM<'de, I: OMDeserializable<'de>> {
     We call $A_1$ the function and $A_2$ to $A_n$ the arguments.
     </div> */
     OMA {
-        head: Either<I, Box<Self>>,
-        args: Vec<Either<I, Self>>,
+        applicant: Either<I, Box<Self>>,
+        arguments: Vec<Either<I, Self>>,
         attrs: Vec<OMAttr<'de, I>>,
     } = OMKind::OMA as _,
 
@@ -402,9 +402,9 @@ pub enum OM<'de, I: OMDeserializable<'de>> {
     $C$ is called the body of the binding object above.
     </div> */
     OMBIND {
-        head: Either<I, Box<Self>>,
-        context: Vec<(Cow<'de, str>, Vec<OMAttr<'de, I>>)>,
-        body: Either<I, Box<Self>>,
+        binder: Either<I, Box<Self>>,
+        variables: Vec<(Cow<'de, str>, Vec<OMAttr<'de, I>>)>,
+        object: Either<I, Box<Self>>,
         attrs: Vec<OMAttr<'de, I>>,
     } = OMKind::OMBIND as _,
 
@@ -413,10 +413,10 @@ pub enum OM<'de, I: OMDeserializable<'de>> {
     derived OpenMath objects, then $\mathrm{error}(S,A_1,...,A_n)$ is an OpenMath error object.
     </div> */
     OME {
-        cd_base: Option<Cow<'de, str>>,
-        cd_name: Cow<'de, str>,
+        cdbase: Option<Cow<'de, str>>,
+        cd: Cow<'de, str>,
         name: Cow<'de, str>,
-        args: Vec<Either<I, OMMaybeForeign<'de, Self>>>,
+        arguments: Vec<Either<I, OMMaybeForeign<'de, Self>>>,
         attrs: Vec<OMAttr<'de, I>>,
     } = OMKind::OME as _,
 }
@@ -643,7 +643,7 @@ mod tests {
 
     #[derive(Debug, PartialEq, Clone)]
     struct TestSymbol {
-        cd_base: String,
+        cdbase: String,
         cd: String,
         name: String,
     }
@@ -653,13 +653,11 @@ mod tests {
 
         fn from_openmath(
             om: OM<'de, Self>,
-            cd_base: &str,
+            cdbase: &str,
         ) -> Result<Either<Self, OM<'de, Self>>, Self::Err> {
             match om {
-                OM::OMS {
-                    cd_name: cd, name, ..
-                } => Ok(Either::Left(Self {
-                    cd_base: cd_base.to_string(),
+                OM::OMS { cd, name, .. } => Ok(Either::Left(Self {
+                    cdbase: cdbase.to_string(),
                     cd: cd.to_string(),
                     name: name.to_string(),
                 })),
@@ -809,7 +807,7 @@ mod tests {
     #[test]
     fn test_oms_deserialization() {
         let om: OM<TestSymbol> = OM::OMS {
-            cd_name: Cow::Borrowed("arith1"),
+            cd: Cow::Borrowed("arith1"),
             name: Cow::Borrowed("plus"),
             attrs: Vec::new(),
         };
@@ -820,7 +818,7 @@ mod tests {
             Either::Left(test_symbol) => assert_eq!(
                 test_symbol,
                 TestSymbol {
-                    cd_base: "http://www.openmath.org/cd".to_string(),
+                    cdbase: "http://www.openmath.org/cd".to_string(),
                     cd: "arith1".to_string(),
                     name: "plus".to_string(),
                 }
@@ -877,7 +875,7 @@ mod tests {
             type Err = String;
             fn from_openmath(
                 om: OM<'d, Self>,
-                _cd_base: &str,
+                _cdbase: &str,
             ) -> Result<Either<Self, OM<'d, Self>>, Self::Err>
             where
                 Self: Sized,
@@ -917,7 +915,7 @@ mod tests {
             type Err = String;
             fn from_openmath(
                 om: OM<'d, Self>,
-                _cd_base: &str,
+                _cdbase: &str,
             ) -> Result<Either<Self, OM<'d, Self>>, Self::Err>
             where
                 Self: Sized,

@@ -38,12 +38,12 @@ impl<O: OMSerializable + ?Sized> serde::Serialize for super::OMObject<'_, O> {
     where
         S: Serializer,
     {
-        let cd_base = self.0.cd_base();
+        let cdbase = self.0.cdbase();
         let mut s =
-            serializer.serialize_struct("OMObject", if cd_base.is_some() { 4 } else { 3 })?;
+            serializer.serialize_struct("OMObject", if cdbase.is_some() { 4 } else { 3 })?;
         s.serialize_field("kind", "OMOBJ")?;
         s.serialize_field("openmath", "2.0")?;
-        if let Some(b) = self.0.cd_base() {
+        if let Some(b) = self.0.cdbase() {
             s.serialize_field("cdbase", b)?;
         } else {
             s.skip_field("cdbase")?;
@@ -116,20 +116,20 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
         's: 'ns;
 
     #[inline]
-    fn current_cd_base(&self) -> &str {
+    fn current_cdbase(&self) -> &str {
         self.next_ns.unwrap_or(self.current_ns)
     }
 
-    fn with_cd_base<'ns>(self, cd_base: &'ns str) -> Result<Self::SubSerializer<'ns>, Self::Err>
+    fn with_cdbase<'ns>(self, cdbase: &'ns str) -> Result<Self::SubSerializer<'ns>, Self::Err>
     where
         's: 'ns,
     {
-        if self.current_ns == cd_base {
+        if self.current_ns == cdbase {
             Ok(self)
         } else {
             Ok(Serder {
                 s: self.s,
-                next_ns: Some(cd_base),
+                next_ns: Some(cdbase),
                 current_ns: self.current_ns,
             })
         }

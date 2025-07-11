@@ -434,7 +434,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
         OMD::from_openmath(
             OM::OMS {
-                cd_name,
+                cd: cd_name,
                 name,
                 attrs,
             },
@@ -468,7 +468,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         else {
             return Err(A::Error::custom("missing error in OME"));
         };
-        let args = seq
+        let arguments = seq
             .next_element_seed(OMForeignSeq(cdbase_i, PhantomData))?
             .unwrap_or_default();
         //cdbase.as_ref().map_or::<&str, _>(&self.0, |s| s.as_ref());
@@ -476,10 +476,10 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
         OMD::from_openmath(
             OM::OME {
-                cd_base: cdbase.map(|e| e.0),
-                cd_name: cd_name.0,
+                cdbase: cdbase.map(|e| e.0),
+                cd: cd_name.0,
                 name: name.0,
-                args,
+                arguments,
                 attrs,
             },
             cdbase_i,
@@ -518,8 +518,8 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
         OMD::from_openmath(
             OM::OMA {
-                head: head.0.map_right(Box::new),
-                args,
+                applicant: head.0.map_right(Box::new),
+                arguments: args,
                 attrs,
             },
             cdbase,
@@ -566,9 +566,9 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
         OMD::from_openmath(
             OM::OMBIND {
-                head: head.0.map_right(Box::new),
-                context,
-                body: body.0.map_right(Box::new),
+                binder: head.0.map_right(Box::new),
+                variables: context,
+                object: body.0.map_right(Box::new),
                 attrs,
             },
             cdbase,
@@ -942,7 +942,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         let cdbase = cdbase.as_deref().unwrap_or(&self.0);
         OMD::from_openmath(
             OM::OMS {
-                cd_name: cd.0,
+                cd: cd.0,
                 name: name.0,
                 attrs,
             },
@@ -1000,10 +1000,10 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         {
             return OMD::from_openmath(
                 OM::OME {
-                    cd_base: cdbase.map(|e| e.0),
-                    cd_name: cd.0,
+                    cdbase: cdbase.map(|e| e.0),
+                    cd: cd.0,
                     name: name.0,
-                    args: arguments.unwrap_or_default(),
+                    arguments: arguments.unwrap_or_default(),
                     attrs,
                 },
                 &self.0,
@@ -1069,8 +1069,8 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         if let Some(head) = applicant {
             return OMD::from_openmath(
                 OM::OMA {
-                    head: head.0.map_right(Box::new),
-                    args: arguments.unwrap_or_default(),
+                    applicant: head.0.map_right(Box::new),
+                    arguments: arguments.unwrap_or_default(),
                     attrs,
                 },
                 cdbase.as_deref().unwrap_or(&self.0),
@@ -1166,9 +1166,9 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         };
         OMD::from_openmath(
             OM::OMBIND {
-                head: binder.0.map_right(Box::new),
-                context: variables,
-                body: object.0.map_right(Box::new),
+                binder: binder.0.map_right(Box::new),
+                variables,
+                object: object.0.map_right(Box::new),
                 attrs,
             },
             cdbase.as_deref().unwrap_or(&self.0),

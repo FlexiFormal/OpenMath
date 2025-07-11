@@ -128,7 +128,7 @@ impl OMSerializable for Polynomial {
 **/
 pub trait OMSerializable {
     #[inline]
-    fn cd_base(&self) -> Option<&str> {
+    fn cdbase(&self) -> Option<&str> {
         None
     }
 
@@ -172,7 +172,7 @@ pub trait OMSerializable {
     /// ```
     #[inline]
     fn openmath_display(&self) -> impl std::fmt::Display + std::fmt::Debug + use<'_, Self> {
-        OMDisplay(self, self.cd_base())
+        OMDisplay(self, self.cdbase())
     }
 
     /// Create a serde-compatible serializer wrapper.
@@ -196,7 +196,7 @@ pub trait OMSerializable {
     #[cfg(feature = "serde")]
     #[inline]
     fn openmath_serde(&self) -> impl ::serde::Serialize + use<'_, Self> {
-        serde_impl::SerdeSerializer(self, self.cd_base(), crate::OPENMATH_BASE_URI.as_str())
+        serde_impl::SerdeSerializer(self, self.cdbase(), crate::OPENMATH_BASE_URI.as_str())
     }
 
     /// Returns something that [`Display`](std::fmt::Display)s
@@ -323,9 +323,9 @@ pub trait OMSerializer<'s>: Sized {
     where
         's: 'ns;
 
-    fn current_cd_base(&self) -> &str;
+    fn current_cdbase(&self) -> &str;
     /// ### Errors
-    fn with_cd_base<'ns>(self, cd_base: &'ns str) -> Result<Self::SubSerializer<'ns>, Self::Err>
+    fn with_cdbase<'ns>(self, cdbase: &'ns str) -> Result<Self::SubSerializer<'ns>, Self::Err>
     where
         's: 'ns;
 
@@ -457,7 +457,7 @@ pub trait OMSerializer<'s>: Sized {
     - The name of the symbol (`plus`)
     - The name of the content dictionary containing the symbol (`arith1`)
     - The base Url of the content dictionary (`http://www.openmath.org/cd`). This is
-      provided using the [`with_cd_base`](OMSerializer::with_cd_base)-method
+      provided using the [`with_cdbase`](OMSerializer::with_cdbase)-method
 
 
     # Errors
@@ -662,8 +662,8 @@ pub trait AsOMS {
         struct AsOM<'a, A: AsOMS + ?Sized>(&'a A);
         impl<A: AsOMS + ?Sized> OMSerializable for AsOM<'_, A> {
             fn as_openmath<'s, S: OMSerializer<'s>>(&self, serializer: S) -> Result<S::Ok, S::Err> {
-                if let Some(b) = self.0.cdbase(serializer.current_cd_base()) {
-                    serializer.with_cd_base(&b)?.oms(self.0.cd(), self.0.name())
+                if let Some(b) = self.0.cdbase(serializer.current_cdbase()) {
+                    serializer.with_cdbase(&b)?.oms(self.0.cd(), self.0.name())
                 } else {
                     serializer.oms(self.0.cd(), self.0.name())
                 }
@@ -880,7 +880,7 @@ struct DisplaySerializer<'f1, 'f2> {
 }
 impl DisplaySerializer<'_, '_> {
     fn rec(&mut self, o: impl OMSerializable) -> Result<(), DisplayErr> {
-        let s = if let Some(next) = o.cd_base() {
+        let s = if let Some(next) = o.cdbase() {
             if self.current_ns == next {
                 DisplaySerializer {
                     f: self.f,
@@ -921,20 +921,20 @@ impl<'f1, 'f2> OMSerializer<'f1> for DisplaySerializer<'f1, 'f2> {
     where
         'f1: 'ns;
     #[inline]
-    fn current_cd_base(&self) -> &str {
+    fn current_cdbase(&self) -> &str {
         self.next_ns.unwrap_or(self.current_ns)
     }
 
-    fn with_cd_base<'ns>(self, cd_base: &'ns str) -> Result<Self::SubSerializer<'ns>, Self::Err>
+    fn with_cdbase<'ns>(self, cdbase: &'ns str) -> Result<Self::SubSerializer<'ns>, Self::Err>
     where
         'f1: 'ns,
     {
-        if self.current_ns == cd_base {
+        if self.current_ns == cdbase {
             Ok(self)
         } else {
             Ok(DisplaySerializer {
                 f: self.f,
-                next_ns: Some(cd_base),
+                next_ns: Some(cdbase),
                 current_ns: self.current_ns,
             })
         }
@@ -1126,7 +1126,7 @@ pub mod testdoc {
         };
     }
     impl<const LEN: usize, O: OMSerializable> OMSerializable for Lambda<'_, LEN, O> {
-        fn cd_base(&self) -> Option<&str> {
+        fn cdbase(&self) -> Option<&str> {
             Self::URI.cdbase
         }
         fn as_openmath<'s, S: OMSerializer<'s>>(&self, serializer: S) -> Result<S::Ok, S::Err> {
@@ -1139,7 +1139,7 @@ pub mod testdoc {
     impl OMSerializable for TestSymbol {
         fn as_openmath<'s, S: OMSerializer<'s>>(&self, serializer: S) -> Result<S::Ok, S::Err> {
             serializer
-                .with_cd_base("http://test.org")?
+                .with_cdbase("http://test.org")?
                 .oms("test", self.0)
         }
     }

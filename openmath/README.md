@@ -1,10 +1,6 @@
-A comprehensive Rust library for handling **<span style="font-variant:small-caps;">OpenMath</span>** objects, providing robust (de)serialization
-capabilities for various OpenMath formats including specification-compliant XML, JSON, and arbitrary
-formats via [serde](https://docs.rs/serde).
-
-## What is <span style="font-variant:small-caps;">OpenMath</span>?
-
-OpenMath is a standard for representing mathematical expressions in a machine-readable, uniform way as abstract syntax tree with binding.
+A comprehensive Rust library for handling **<span style="font-variant:small-caps;">OpenMath</span>** objects, providing
+- An [`OpenMath`] data structure and
+- *almost* zero-copy (de)serialization for various <span style="font-variant:small-caps;">OpenMath</span> formats, including specification-compliant XML, JSON, and arbitrary other formats via [serde](https://docs.rs/serde).
 
 
 ### Serialization & Deserialization
@@ -14,11 +10,6 @@ OpenMath is a standard for representing mathematical expressions in a machine-re
   OpenMath JSON specification, specification-conform XML (de)serialization., official binary
   representation is WiP
 
-
-## Features
-
-- **Zero-copy deserialization** where possible
-- **Arbitrary precision integers** with automatic small/big integer optimization
 
 ## TODO
 
