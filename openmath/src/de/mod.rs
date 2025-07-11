@@ -75,29 +75,30 @@ impl<'d> OMDeserializable<'d> for SimplifiedInt {
     {
         match om {
             // An integer
-            OM::OMI(i) => {
+            OM::OMI{int,..} => {
                 // ...which fits in an i128
-                if let Some(i) = i.is_i128() {
+                if let Some(i) = int.is_i128() {
                     Ok(Either::Left(Self(i)))
                 } else {
-                    Err(format!("Invalid int value: {i}"))
+                    Err(format!("Invalid int value: {int}"))
                 }
             }
             // Addition or multiplication
-            OM::OMS { cd_name, name } if
+            OM::OMS { cd_name, name, attrs } if
                 cd_name == "arith1" &&
                 (name == "plus" || name == "times") &&
                 cd_base == openmath::OPENMATH_BASE_URI.as_str() => {
                 // works, but without arguments, we can't do anything to it *yet*.
                 // => We send it back, so we can take care of it later, if it
                 // occurs as the head of an OMA expression
-                Ok(either::Right(OM::OMS { cd_name, name }))
+                Ok(either::Right(OM::OMS { cd_name, name, attrs }))
             }
             // some operator application to two arguments
             OM::OMA {
                 // still an open math expression:
                 head: either::Right(op),
                 mut args,
+                attrs
             } if args.iter().all(Either::is_left)
                 && args.len() == 2
                 && cd_base == openmath::OPENMATH_BASE_URI.as_str() => {

@@ -1,8 +1,10 @@
 use std::fmt::Write;
 
+use either::Either;
+
 use crate::{
     OMSerializable,
-    ser::{OMAttrSerializable, OMForeignSerializable},
+    ser::{AsOMS, BindVar, OMAttr},
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -120,13 +122,10 @@ impl<'f> XmlDisplayer<'_, 'f> {
         }
     }
 
-    fn omforeign<OM: OMSerializable, F: std::fmt::Display + ?Sized>(
-        &mut self,
-        a: &OMForeignSerializable<'_, OM, F>,
-    ) -> Result<(), XmlWriteError> {
-        match a {
-            OMForeignSerializable::OM(o) => o.as_openmath(self.clone())?,
-            OMForeignSerializable::Foreign { encoding, value } => {
+    fn omforeign(&mut self, a: impl super::OMOrForeign) -> Result<(), XmlWriteError> {
+        match a.om_or_foreign() {
+            Either::Left(o) => o.as_openmath(self.clone())?,
+            Either::Right((encoding, value)) => {
                 let ind = self.indent.is_some();
                 if ind {
                     self.indent()?;
@@ -188,10 +187,7 @@ impl<'s, 'f> super::OMSerializer<'s> for XmlDisplayer<'s, 'f> {
         write!(self.w, "<OMF dec=\"{value}\"/>")?;
         Ok(())
     }
-    fn omb<I: IntoIterator<Item = u8>>(mut self, bytes: I) -> Result<Self::Ok, Self::Err>
-    where
-        I::IntoIter: ExactSizeIterator,
-    {
+    fn omb(mut self, bytes: impl ExactSizeIterator<Item = u8>) -> Result<Self::Ok, Self::Err> {
         use crate::base64::Base64Encodable;
         self.indent()?;
         self.w.write_str("<OMB>")?;
@@ -204,14 +200,14 @@ impl<'s, 'f> super::OMSerializer<'s> for XmlDisplayer<'s, 'f> {
         self.w.write_str("</OMB>")?;
         Ok(())
     }
-    fn omstr(mut self, string: &impl std::fmt::Display) -> Result<Self::Ok, Self::Err> {
+    fn omstr(mut self, string: impl std::fmt::Display) -> Result<Self::Ok, Self::Err> {
         self.indent()?;
         self.w.write_str("<OMSTR>")?;
         write!(DisplayEscaper(self.w), "{string}")?;
         self.w.write_str("</OMSTR>")?;
         Ok(())
     }
-    fn omv(mut self, name: &impl std::fmt::Display) -> Result<Self::Ok, Self::Err> {
+    fn omv(mut self, name: impl std::fmt::Display) -> Result<Self::Ok, Self::Err> {
         self.indent()?;
         self.w.write_str("<OMV name=\"")?;
         write!(DisplayEscaper(self.w), "{name}")?;
@@ -220,8 +216,8 @@ impl<'s, 'f> super::OMSerializer<'s> for XmlDisplayer<'s, 'f> {
     }
     fn oms(
         mut self,
-        cd_name: &impl std::fmt::Display,
-        name: &impl std::fmt::Display,
+        cd_name: impl std::fmt::Display,
+        name: impl std::fmt::Display,
     ) -> Result<Self::Ok, Self::Err> {
         self.indent()?;
         self.w.write_str("<OMS ")?;
@@ -237,19 +233,11 @@ impl<'s, 'f> super::OMSerializer<'s> for XmlDisplayer<'s, 'f> {
         self.w.write_str("\"/>")?;
         Ok(())
     }
-    fn ome<
-        'a,
-        T: super::OMSerializable + 'a,
-        D: std::fmt::Display + 'a + ?Sized,
-        I: IntoIterator<Item = super::OMForeignSerializable<'a, T, D>>,
-    >(
+    fn ome(
         mut self,
-        error: &impl super::AsOMS,
-        args: I,
-    ) -> Result<Self::Ok, Self::Err>
-    where
-        I::IntoIter: ExactSizeIterator,
-    {
+        error: impl AsOMS,
+        args: impl ExactSizeIterator<Item: super::OMOrForeign>,
+    ) -> Result<Self::Ok, Self::Err> {
         self.indent()?;
         if let Some(ns) = self.next_ns.take() {
             self.w.write_str("<OME cdbase=\"")?;
@@ -262,7 +250,7 @@ impl<'s, 'f> super::OMSerializer<'s> for XmlDisplayer<'s, 'f> {
         self.indented(|nslf| {
             error.as_oms().as_openmath(nslf.clone())?;
             for a in args {
-                nslf.omforeign(&a)?;
+                nslf.omforeign(a)?;
             }
             Ok(())
         })?;
@@ -270,14 +258,12 @@ impl<'s, 'f> super::OMSerializer<'s> for XmlDisplayer<'s, 'f> {
         self.w.write_str("</OME>")?;
         Ok(())
     }
-    fn oma<T: super::OMSerializable, I: IntoIterator<Item = T>>(
+
+    fn oma(
         mut self,
-        head: &impl super::OMSerializable,
-        args: I,
-    ) -> Result<Self::Ok, Self::Err>
-    where
-        I::IntoIter: ExactSizeIterator,
-    {
+        head: impl OMSerializable,
+        args: impl ExactSizeIterator<Item: OMSerializable>,
+    ) -> Result<Self::Ok, Self::Err> {
         self.indent()?;
         if let Some(ns) = self.next_ns.take() {
             self.w.write_str("<OMA cdbase=\"")?;
@@ -299,19 +285,11 @@ impl<'s, 'f> super::OMSerializer<'s> for XmlDisplayer<'s, 'f> {
         Ok(())
     }
 
-    fn omattr<
-        'a,
-        T: super::OMSerializable + 'a,
-        D: std::fmt::Display + 'a,
-        I: IntoIterator<Item = &'a super::OMAttrSerializable<'a, T, D>>,
-    >(
+    fn omattr(
         mut self,
-        attrs: I,
-        atp: &'a impl super::OMSerializable,
-    ) -> Result<Self::Ok, Self::Err>
-    where
-        I::IntoIter: ExactSizeIterator,
-    {
+        attrs: impl ExactSizeIterator<Item: super::OMAttr>,
+        atp: impl OMSerializable,
+    ) -> Result<Self::Ok, Self::Err> {
         let attrs = attrs.into_iter();
         if attrs.len() == 0 {
             return atp.as_openmath(self.clone());
@@ -331,19 +309,9 @@ impl<'s, 'f> super::OMSerializer<'s> for XmlDisplayer<'s, 'f> {
             nslf.indent()?;
             nslf.w.write_str("<OMATP>")?;
             nslf.indented(move |nslf| {
-                for OMAttrSerializable {
-                    cdbase,
-                    cd,
-                    name,
-                    value,
-                } in attrs
-                {
-                    let mut s = nslf.clone();
-                    if let Some(cdbase) = cdbase {
-                        s.next_ns = Some(cdbase);
-                    }
-                    s.oms(cd, name)?;
-                    nslf.omforeign(value)?;
+                for a in attrs {
+                    a.symbol().as_oms().as_openmath(nslf.clone())?;
+                    nslf.omforeign(a.value())?;
                 }
                 Ok(())
             })?;
@@ -358,20 +326,12 @@ impl<'s, 'f> super::OMSerializer<'s> for XmlDisplayer<'s, 'f> {
         Ok(())
     }
 
-    fn ombind<
-        'a,
-        St: std::fmt::Display + 'a,
-        O: super::OMSerializable + 'a,
-        I: IntoIterator<Item = (&'a St, &'a [&'a super::OMAttrSerializable<'a, O, St>])>,
-    >(
+    fn ombind(
         mut self,
-        head: &'a impl super::OMSerializable,
-        vars: I,
-        body: &'a impl super::OMSerializable,
-    ) -> Result<Self::Ok, Self::Err>
-    where
-        I::IntoIter: ExactSizeIterator,
-    {
+        head: impl OMSerializable,
+        vars: impl ExactSizeIterator<Item: super::BindVar>,
+        body: impl OMSerializable,
+    ) -> Result<Self::Ok, Self::Err> {
         self.indent()?;
         if let Some(ns) = self.next_ns.take() {
             self.w.write_str("<OMBIND cdbase=\"")?;
@@ -389,15 +349,16 @@ impl<'s, 'f> super::OMSerializer<'s> for XmlDisplayer<'s, 'f> {
             let mut was_empty = true;
 
             nslf.indented(|nslf| {
-                for (v, attrs) in vars {
+                for v in vars {
                     if was_empty {
                         nslf.w.write_char('>')?;
                     }
                     was_empty = false;
-                    if attrs.is_empty() {
-                        nslf.clone().omv(v)?;
+                    let attrs = v.attrs();
+                    if attrs.len() == 0 {
+                        nslf.clone().omv(v.name())?;
                     } else {
-                        nslf.clone().omattr(attrs.iter().copied(), &super::Omv(v))?;
+                        nslf.clone().omattr(attrs, super::Omv(v.name()))?;
                     }
                 }
                 Ok(())

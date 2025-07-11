@@ -17,7 +17,7 @@ mod int;
 pub use either;
 pub use int::Int;
 
-use crate::ser::{AsOMS, OMForeignSerializable};
+use crate::ser::AsOMS;
 
 /// The base URI of official OᴘᴇɴMᴀᴛʜ dictionaries (`http://www.openmath.org/cd`)
 pub static OPENMATH_BASE_URI: std::sync::LazyLock<url::Url> = std::sync::LazyLock::new(||
@@ -290,6 +290,16 @@ pub struct BoundVariable<'om> {
     name: Cow<'om, str>,
     attributes: Vec<Attr<'om, OMMaybeForeign<'om, OMExpr<'om>>>>,
 }
+impl ser::BindVar for &BoundVariable<'_> {
+    #[inline]
+    fn attrs(&self) -> impl ExactSizeIterator<Item: ser::OMAttr> {
+        self.attributes.iter()
+    }
+    #[inline]
+    fn name(&self) -> impl std::fmt::Display {
+        &*self.name
+    }
+}
 
 /// An attribute in an [`OMATTR`](OMKind::OMATTR)
 ///
@@ -300,6 +310,22 @@ pub struct Attr<'o, I> {
     pub cd: Cow<'o, str>,
     pub name: Cow<'o, str>,
     pub value: I,
+}
+impl<I> ser::OMAttr for &Attr<'_, I>
+where
+    for<'a> &'a I: ser::OMOrForeign,
+{
+    #[inline]
+    fn symbol(&self) -> impl AsOMS {
+        ser::Uri {
+            cdbase: self.cdbase.as_deref(),
+            cd: &self.cd,
+            name: &self.name,
+        }
+    }
+    fn value(&self) -> impl ser::OMOrForeign {
+        &self.value
+    }
 }
 
 /// Either an [OpenMath Expression](OMExpr) or an [`OMFOREIGN`](OMKind::OMFOREIGN).
@@ -320,14 +346,18 @@ pub enum OMMaybeForeign<'o, I> {
         value: Cow<'o, str>,
     },
 }
-impl<'o, I: OMSerializable> OMMaybeForeign<'o, I> {
-    fn as_serializable(&'o self) -> OMForeignSerializable<'o, I, str> {
+impl<I: ser::OMSerializable> ser::OMOrForeign for &OMMaybeForeign<'_, I> {
+    fn om_or_foreign(
+        self,
+    ) -> crate::either::Either<
+        impl OMSerializable,
+        (Option<impl std::fmt::Display>, impl std::fmt::Display),
+    > {
         match self {
-            Self::OM(i) => OMForeignSerializable::OM(i),
-            Self::Foreign { encoding, value } => OMForeignSerializable::Foreign {
-                encoding: encoding.as_deref(),
-                value: &**value,
-            },
+            OMMaybeForeign::OM(i) => either::Either::Left(i),
+            OMMaybeForeign::Foreign { encoding, value } => {
+                either::Either::Right((encoding.as_deref(), &**value))
+            }
         }
     }
 }
@@ -365,7 +395,7 @@ impl ser::OMSerializable for OMExpr<'_> {
                 applicant,
                 arguments,
                 attributes,
-            } if attributes.is_empty() => serializer.oma(&**applicant, arguments),
+            } if attributes.is_empty() => serializer.oma(&**applicant, arguments.iter()),
             Self::OME {
                 cd,
                 name,
@@ -378,21 +408,14 @@ impl ser::OMSerializable for OMExpr<'_> {
                     cd,
                     name,
                 },
-                arguments.iter().map(OMMaybeForeign::as_serializable),
+                arguments.iter(),
             ),
-            /*
             Self::OMBIND {
                 binder,
                 variables,
                 object,
                 attributes,
-            } if attributes.is_empty() => serializer.ombind(
-                binder,
-                variables
-                    .iter()
-                    .map(|v| (&v.name, v.attributes.iter().map(Attr::as_serializable))),
-                object,
-            ), */
+            } if attributes.is_empty() => serializer.ombind(&**binder, variables.iter(), &**object),
             _ => todo!(),
         }
     }

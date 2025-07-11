@@ -18,8 +18,9 @@
 //! ```
 use crate::{
     OMSerializable,
-    ser::{AsOMS, OMForeignSerializable, OMSerializer},
+    ser::{AsOMS, OMOrForeign, OMSerializer},
 };
+use either::Either;
 use serde::{
     Serializer,
     ser::{SerializeSeq, SerializeStruct, SerializeTuple},
@@ -78,42 +79,6 @@ pub struct SerdeSerializer<'s, OM>(
 )
 where
     OM: crate::OMSerializable;
-
-pub enum ForeignSerializer<'s, OM, D: std::fmt::Display + ?Sized>
-where
-    OM: crate::OMSerializable,
-{
-    O(SerdeSerializer<'s, OM>),
-    F {
-        encoding: Option<&'s str>,
-        value: &'s D,
-    },
-}
-impl<OM: crate::OMSerializable, D: std::fmt::Display + ?Sized> ::serde::Serialize
-    for ForeignSerializer<'_, OM, D>
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            Self::O(o) => o.serialize(serializer),
-            Self::F { encoding, value } => {
-                let mut struc = serializer
-                    .serialize_struct("OMObject", if encoding.is_some() { 3 } else { 2 })?;
-                struc.serialize_field("kind", &crate::OMKind::OMFOREIGN)?;
-                struc.skip_field("id")?;
-                struc.serialize_field("foreign", &DWrap(value))?;
-                if let Some(e) = encoding {
-                    struc.serialize_field("encoding", e)?;
-                } else {
-                    struc.skip_field("encoding")?;
-                }
-                struc.end()
-            }
-        }
-    }
-}
 
 impl<OM: crate::OMSerializable> ::serde::Serialize for SerdeSerializer<'_, OM> {
     #[inline]
@@ -190,7 +155,7 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
         struc.end()
     }
 
-    fn omstr(self, string: &impl std::fmt::Display) -> Result<Self::Ok, Self::Err> {
+    fn omstr(self, string: impl std::fmt::Display) -> Result<Self::Ok, Self::Err> {
         let mut struc = self.s.serialize_struct("OMObject", 2)?;
         struc.serialize_field("kind", &crate::OMKind::OMSTR)?;
         struc.skip_field("id")?;
@@ -198,10 +163,7 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
         struc.end()
     }
 
-    fn omb<I: IntoIterator<Item = u8>>(self, bytes: I) -> Result<Self::Ok, Self::Err>
-    where
-        I::IntoIter: ExactSizeIterator,
-    {
+    fn omb(self, bytes: impl ExactSizeIterator<Item = u8>) -> Result<Self::Ok, Self::Err> {
         use crate::base64::Base64Encodable;
         let mut struc = self.s.serialize_struct("OMObject", 2)?;
         struc.serialize_field("kind", &crate::OMKind::OMB)?;
@@ -211,7 +173,7 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
         struc.end()
     }
 
-    fn omv(self, name: &impl std::fmt::Display) -> Result<Self::Ok, Self::Err> {
+    fn omv(self, name: impl std::fmt::Display) -> Result<Self::Ok, Self::Err> {
         let mut struc = self.s.serialize_struct("OMObject", 2)?;
         struc.serialize_field("kind", &crate::OMKind::OMV)?;
         struc.skip_field("id")?;
@@ -221,8 +183,8 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
 
     fn oms(
         self,
-        cd_name: &impl std::fmt::Display,
-        name: &impl std::fmt::Display,
+        cd_name: impl std::fmt::Display,
+        name: impl std::fmt::Display,
     ) -> Result<Self::Ok, Self::Err> {
         let num_fields = if self.next_ns.is_some() { 4 } else { 3 };
         let mut struc = self.s.serialize_struct("OMObject", num_fields)?;
@@ -238,20 +200,11 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
         struc.end()
     }
 
-    fn ome<
-        'a,
-        T: OMSerializable + 'a,
-        D: std::fmt::Display + 'a + ?Sized,
-        I: IntoIterator<Item = super::OMForeignSerializable<'a, T, D>>,
-    >(
+    fn ome(
         mut self,
-        error: &impl super::AsOMS,
-        args: I,
-    ) -> Result<Self::Ok, Self::Err>
-    where
-        I::IntoIter: ExactSizeIterator,
-    {
-        let args = args.into_iter();
+        error: impl AsOMS,
+        args: impl ExactSizeIterator<Item: super::OMOrForeign>,
+    ) -> Result<Self::Ok, Self::Err> {
         let mut num_fields = 2;
         if args.len() > 0 {
             num_fields += 1;
@@ -277,14 +230,16 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
         if args.len() > 0 {
             struc.serialize_field(
                 "arguments",
-                &Iter(std::cell::Cell::new(Some(args.map(|e| match e {
-                    OMForeignSerializable::OM(e) => {
-                        ForeignSerializer::O(SerdeSerializer(e, None, self.current_ns))
-                    }
-                    OMForeignSerializable::Foreign { encoding, value } => {
-                        ForeignSerializer::F { encoding, value }
-                    }
-                })))),
+                &Iter(std::cell::Cell::new(Some(args.map(
+                    |e| match e.om_or_foreign() {
+                        Either::Left(e) => {
+                            ForeignSerializer::O(SerdeSerializer(e, None, self.current_ns))
+                        }
+                        Either::Right((encoding, value)) => {
+                            ForeignSerializer::F { encoding, value }
+                        }
+                    },
+                )))),
             )?;
         } else {
             struc.skip_field("arguments")?;
@@ -292,15 +247,11 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
         struc.end()
     }
 
-    fn oma<T: OMSerializable, I: IntoIterator<Item = T>>(
+    fn oma(
         mut self,
-        head: &impl OMSerializable,
-        args: I,
-    ) -> Result<Self::Ok, Self::Err>
-    where
-        I::IntoIter: ExactSizeIterator,
-    {
-        let args = args.into_iter();
+        head: impl OMSerializable,
+        args: impl ExactSizeIterator<Item: OMSerializable>,
+    ) -> Result<Self::Ok, Self::Err> {
         let mut num_fields = 2;
         if args.len() != 0 {
             num_fields += 1;
@@ -331,20 +282,12 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
         struc.end()
     }
 
-    fn ombind<
-        'a,
-        St: std::fmt::Display + 'a,
-        O: OMSerializable + 'a,
-        I: IntoIterator<Item = (&'a St, &'a [&'a super::OMAttrSerializable<'a, O, St>])>,
-    >(
+    fn ombind(
         mut self,
-        head: &'a impl OMSerializable,
-        vars: I,
-        body: &'a impl OMSerializable,
-    ) -> Result<Self::Ok, Self::Err>
-    where
-        I::IntoIter: ExactSizeIterator,
-    {
+        head: impl OMSerializable,
+        vars: impl ExactSizeIterator<Item: super::BindVar>,
+        body: impl OMSerializable,
+    ) -> Result<Self::Ok, Self::Err> {
         let vars = vars.into_iter();
         let mut num_fields = 4;
         if self.next_ns.is_some() {
@@ -362,29 +305,20 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
         struc.serialize_field("binder", &SerdeSerializer(head, None, self.current_ns))?;
         struc.serialize_field(
             "variables",
-            &Iter(std::cell::Cell::new(Some(vars.map(|(var, attrs)| VWrap {
+            &Iter(std::cell::Cell::new(Some(vars.map(|v| VWrap {
                 ns: self.current_ns,
-                var,
-                attrs,
+                var: v,
             })))),
         )?;
         struc.serialize_field("object", &SerdeSerializer(body, None, self.current_ns))?;
         struc.end()
     }
 
-    fn omattr<
-        'a,
-        T: OMSerializable + 'a,
-        D: std::fmt::Display + 'a,
-        I: IntoIterator<Item = &'a super::OMAttrSerializable<'a, T, D>>,
-    >(
+    fn omattr(
         mut self,
-        attrs: I,
-        atp: &'a impl OMSerializable,
-    ) -> Result<Self::Ok, Self::Err>
-    where
-        I::IntoIter: ExactSizeIterator,
-    {
+        attrs: impl ExactSizeIterator<Item: super::OMAttr>,
+        atp: impl OMSerializable,
+    ) -> Result<Self::Ok, Self::Err> {
         let i = attrs.into_iter();
         if i.len() == 0 {
             return atp.as_openmath(self);
@@ -410,7 +344,7 @@ impl<'s, S: ::serde::Serializer> OMSerializer<'s> for Serder<'s, S> {
         )?;
 
         struc.serialize_field("object", &SerdeSerializer(atp, None, self.current_ns))?;
-        todo!()
+        struc.end()
     }
 }
 
@@ -437,86 +371,96 @@ where
     }
 }
 
-struct DWrap<'d, D: std::fmt::Display>(&'d D);
-impl<D: std::fmt::Display> serde::Serialize for DWrap<'_, D> {
+struct DWrap<D: std::fmt::Display>(D);
+impl<D: std::fmt::Display> serde::Serialize for DWrap<D> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        serializer.collect_str(self.0)
+        serializer.collect_str(&self.0)
     }
 }
 
-struct VWrap<'d, D: std::fmt::Display, O: super::OMSerializable> {
+struct VWrap<'d, V: super::BindVar> {
     ns: &'d str,
-    var: &'d D,
-    attrs: &'d [&'d super::OMAttrSerializable<'d, O, D>],
+    var: V,
 }
-impl<D: std::fmt::Display, O: super::OMSerializable> serde::Serialize for VWrap<'_, D, O> {
+impl<V: super::BindVar> serde::Serialize for VWrap<'_, V> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        if self.attrs.is_empty() {
-            SerdeSerializer(&super::Omv(self.var), None, self.ns).serialize(serializer)
+        let attrs = self.var.attrs();
+        if attrs.len() == 0 {
+            Serder {
+                s: serializer,
+                next_ns: None,
+                current_ns: self.ns,
+            }
+            .omv(self.var.name())
         } else {
-            SerdeSerializer(
-                &OMAttr {
-                    inner: super::Omv(self.var),
-                    attrs: self.attrs,
-                },
-                None,
-                self.ns,
-            )
-            .serialize(serializer)
+            Serder {
+                s: serializer,
+                next_ns: None,
+                current_ns: self.ns,
+            }
+            .omattr(attrs, super::Omv(self.var.name()))
         }
     }
 }
 
-struct OMAttr<'de, O: super::OMSerializable, T: OMSerializable + 'de, D: std::fmt::Display + 'de> {
-    inner: O,
-    attrs: &'de [&'de super::OMAttrSerializable<'de, T, D>],
-}
-impl<'de, O: super::OMSerializable, T: OMSerializable + 'de, D: std::fmt::Display + 'de>
-    super::OMSerializable for OMAttr<'de, O, T, D>
-{
-    #[inline]
-    fn as_openmath<'s, S: OMSerializer<'s>>(&self, serializer: S) -> Result<S::Ok, S::Err> {
-        serializer.omattr(self.attrs.iter().copied(), &self.inner)
-    }
-}
-
-struct OMAttrW<'de, T: OMSerializable + 'de, D: std::fmt::Display + 'de> {
+struct OMAttrW<'de, A: super::OMAttr> {
     ns: &'de str,
-    attr: &'de super::OMAttrSerializable<'de, T, D>,
+    attr: A,
 }
 
-impl<'de, T: OMSerializable + 'de, D: std::fmt::Display + 'de> serde::Serialize
-    for OMAttrW<'de, T, D>
-{
+impl<A: super::OMAttr> serde::Serialize for OMAttrW<'_, A> {
     #[inline]
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         let mut tup = serializer.serialize_tuple(2)?;
-        tup.serialize_element(&SerdeSerializer(
-            &super::Uri {
-                cdbase: self.attr.cdbase.as_deref(),
-                cd: self.attr.cd.as_ref(),
-                name: self.attr.name.as_ref(),
-            }
-            .as_oms(),
-            None,
-            self.ns,
-        ))?;
-        let v = match self.attr.value {
-            OMForeignSerializable::OM(e) => ForeignSerializer::O(SerdeSerializer(e, None, self.ns)),
-            OMForeignSerializable::Foreign { encoding, value } => {
-                ForeignSerializer::F { encoding, value }
-            }
+        let symbol = self.attr.symbol();
+        tup.serialize_element(&SerdeSerializer(&symbol.as_oms(), None, self.ns))?;
+        let v = match self.attr.value().om_or_foreign() {
+            Either::Left(e) => ForeignSerializer::O(SerdeSerializer(e, None, self.ns)),
+            Either::Right((encoding, value)) => ForeignSerializer::F { encoding, value },
         };
         tup.serialize_element(&v)?;
         tup.end()
+    }
+}
+
+enum ForeignSerializer<'s, OM, D: std::fmt::Display, E: std::fmt::Display>
+where
+    OM: crate::OMSerializable,
+{
+    O(SerdeSerializer<'s, OM>),
+    F { encoding: Option<E>, value: D },
+}
+impl<OM: crate::OMSerializable, D: std::fmt::Display, E: std::fmt::Display> ::serde::Serialize
+    for ForeignSerializer<'_, OM, D, E>
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::O(o) => o.serialize(serializer),
+            Self::F { encoding, value } => {
+                let mut struc = serializer
+                    .serialize_struct("OMObject", if encoding.is_some() { 3 } else { 2 })?;
+                struc.serialize_field("kind", &crate::OMKind::OMFOREIGN)?;
+                struc.skip_field("id")?;
+                struc.serialize_field("foreign", &DWrap(value))?;
+                if let Some(e) = encoding {
+                    struc.serialize_field("encoding", &DWrap(e))?;
+                } else {
+                    struc.skip_field("encoding")?;
+                }
+                struc.end()
+            }
+        }
     }
 }
