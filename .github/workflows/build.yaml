@@ -19,7 +19,7 @@ jobs:
       - name: Upload openmath Docs
         uses: actions/upload-pages-artifact@v3
         with:
-          path: target/doc/openmath
+          path: target/doc
   deploy-docs:
     needs: linux
     permissions:
