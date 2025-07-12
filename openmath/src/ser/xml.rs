@@ -30,7 +30,7 @@ impl<O: super::OMSerializable + ?Sized> std::fmt::Display for XmlDisplay<'_, O> 
             indent: if self.pretty { Some((false, 0)) } else { None },
             w: f,
             next_ns: self.o.cdbase(),
-            current_ns: crate::OPENMATH_BASE_URI.as_str(),
+            current_ns: crate::OPENMATH_BASE_URI,
         };
         self.o.as_openmath(displayer).map_err(|_| std::fmt::Error)
     }
@@ -55,7 +55,7 @@ impl<O: super::OMSerializable + ?Sized> std::fmt::Display for XmlObjDisplay<'_, 
             f.write_str("\"")?;
             ns
         } else {
-            crate::OPENMATH_BASE_URI.as_str()
+            crate::OPENMATH_BASE_URI
         };
         f.write_char('>')?;
 
@@ -139,10 +139,10 @@ impl<'f> XmlDisplayer<'_, 'f> {
                 }
                 if ind {
                     self.indent()?;
-                    write!(DisplayEscaper(self.w), "  {value}")?;
+                    write!(self.w, "  {value}")?;
                     self.indent()?;
                 } else {
-                    write!(DisplayEscaper(self.w), "{value}")?;
+                    write!(self.w, "{value}")?;
                 }
                 self.w.write_str("</OMFOREIGN>")?;
             }
@@ -317,10 +317,9 @@ impl<'s, 'f> super::OMSerializer<'s> for XmlDisplayer<'s, 'f> {
             })?;
             nslf.indent()?;
             nslf.w.write_str("</OMATP>")?;
-            Ok(())
+            atp.as_openmath(nslf.clone())
         })?;
 
-        atp.as_openmath(self.clone())?;
         self.indent()?;
         self.w.write_str("</OMATTR>")?;
         Ok(())

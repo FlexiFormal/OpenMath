@@ -24,7 +24,7 @@ representation. The deserialization process either succeeds (returning the
 target type) or fails gracefully (returning the original OpenMath object).
 
 Deserialization is driven by the [`from_openmath`](OMDeserializable::from_openmath)-method
-which gets an [`OpenMath`] and can return either
+which gets an [`OM`] and can return either
 - a `Self`, if the OpenMath expression represent a Self, or
 - the original expression if it can not get deserialized (*yet*), or
 - an error.
@@ -87,7 +87,7 @@ impl<'d> OMDeserializable<'d> for SimplifiedInt {
             OM::OMS { cd, name, attrs } if
                 cd == "arith1" &&
                 (name == "plus" || name == "times") &&
-                cdbase == openmath::OPENMATH_BASE_URI.as_str() => {
+                cdbase == openmath::OPENMATH_BASE_URI => {
                 // works, but without arguments, we can't do anything to it *yet*.
                 // => We send it back, so we can take care of it later, if it
                 // occurs as the head of an OMA expression
@@ -101,7 +101,7 @@ impl<'d> OMDeserializable<'d> for SimplifiedInt {
                 attrs
             } if arguments.iter().all(Either::is_left)
                 && arguments.len() == 2
-                && cdbase == openmath::OPENMATH_BASE_URI.as_str() => {
+                && cdbase == openmath::OPENMATH_BASE_URI => {
                 // An OMA only ends up here, after both the head and all arguments
                 // were fed into this method.
                 // Since "plus" and "times" are the only values for
@@ -246,7 +246,7 @@ pub struct OMObject<'de, O: OMDeserializable<'de> + 'de>(O, std::marker::Phantom
 
 impl<'de, O: OMDeserializable<'de>> OMObject<'de, O> {
     #[inline]
-    pub fn take(self) -> O {
+    pub fn into_inner(self) -> O {
         self.0
     }
 
@@ -302,7 +302,7 @@ impl<'de, O: OMDeserializable<'de>> OMObject<'de, O> {
 /// see [OMDeserializable] for documentation and an example.
 ///
 /// Note that there is no case for [OMATTR](crate::OMKind::OMATTR) - instead,
-/// every case has a <code>[Vec]<[Attr]<'de, I>></code>, which is usually empty.
+/// every case has a <code>[Vec]<[OMAttr]<'de, I>></code>, which is usually empty.
 /// Otherwise, we'd have to either deal with two separate types, or have the
 /// nonsensical case `OMATTR(OMATTR(OMATTR(...),...),...)`, which would also
 /// require a [`Box`]-indirection (hence allocation), etc. since OMATTRS is mostly used
@@ -692,8 +692,8 @@ mod tests {
             attrs: Vec::new(),
         };
 
-        let result = TestInt::from_openmath(om, crate::OPENMATH_BASE_URI.as_str())
-            .expect("should be defined");
+        let result =
+            TestInt::from_openmath(om, crate::OPENMATH_BASE_URI).expect("should be defined");
         match result {
             Either::Left(test_int) => assert_eq!(test_int, TestInt(42)),
             Either::Right(_) => panic!("Expected successful deserialization"),
@@ -708,8 +708,8 @@ mod tests {
             attrs: Vec::new(),
         };
 
-        let result = TestInt::from_openmath(om, crate::OPENMATH_BASE_URI.as_str())
-            .expect("should be defined");
+        let result =
+            TestInt::from_openmath(om, crate::OPENMATH_BASE_URI).expect("should be defined");
         match result {
             Either::Left(_) => panic!("Expected deserialization to fail"),
             Either::Right(OM::OMI {
@@ -729,8 +729,8 @@ mod tests {
             attrs: Vec::new(),
         };
 
-        let result = TestInt::from_openmath(om, crate::OPENMATH_BASE_URI.as_str())
-            .expect("should be defined");
+        let result =
+            TestInt::from_openmath(om, crate::OPENMATH_BASE_URI).expect("should be defined");
         match result {
             Either::Left(_) => panic!("Expected deserialization to fail for i128::MAX"),
             Either::Right(OM::OMI {
@@ -750,8 +750,8 @@ mod tests {
             attrs: Vec::new(),
         };
 
-        let result = TestFloat::from_openmath(om, crate::OPENMATH_BASE_URI.as_str())
-            .expect("should be defined");
+        let result =
+            TestFloat::from_openmath(om, crate::OPENMATH_BASE_URI).expect("should be defined");
         match result {
             Either::Left(test_float) => assert_eq!(test_float, TestFloat(3.14159)),
             Either::Right(_) => panic!("Expected successful deserialization"),
@@ -765,7 +765,7 @@ mod tests {
             attrs: Vec::new(),
         };
 
-        let result = TestFloat::from_openmath(om, crate::OPENMATH_BASE_URI.as_str());
+        let result = TestFloat::from_openmath(om, crate::OPENMATH_BASE_URI);
         match result {
             Err(e) => assert!(e.contains("Non-finite")),
             Ok(_) => panic!("Expected error for infinity"),
@@ -779,8 +779,8 @@ mod tests {
             attrs: Vec::new(),
         };
 
-        let result = TestString::from_openmath(om, crate::OPENMATH_BASE_URI.as_str())
-            .expect("should be defined");
+        let result =
+            TestString::from_openmath(om, crate::OPENMATH_BASE_URI).expect("should be defined");
         match result {
             Either::Left(test_string) => {
                 assert_eq!(test_string, TestString("hello world".to_string()));
@@ -796,8 +796,8 @@ mod tests {
             attrs: Vec::new(),
         };
 
-        let result = TestVariable::from_openmath(om, crate::OPENMATH_BASE_URI.as_str())
-            .expect("should be defined");
+        let result =
+            TestVariable::from_openmath(om, crate::OPENMATH_BASE_URI).expect("should be defined");
         match result {
             Either::Left(test_var) => assert_eq!(test_var, TestVariable("x".to_string())),
             Either::Right(_) => panic!("Expected successful deserialization"),
@@ -812,8 +812,8 @@ mod tests {
             attrs: Vec::new(),
         };
 
-        let result = TestSymbol::from_openmath(om, crate::OPENMATH_BASE_URI.as_str())
-            .expect("should be defined");
+        let result =
+            TestSymbol::from_openmath(om, crate::OPENMATH_BASE_URI).expect("should be defined");
         match result {
             Either::Left(test_symbol) => assert_eq!(
                 test_symbol,
@@ -837,8 +837,8 @@ mod tests {
             attrs: Vec::new(),
         };
 
-        let result = TestInt::from_openmath(om, crate::OPENMATH_BASE_URI.as_str())
-            .expect("should be defined");
+        let result =
+            TestInt::from_openmath(om, crate::OPENMATH_BASE_URI).expect("should be defined");
         match result {
             Either::Left(_) => panic!("Expected deserialization to fail"),
             Either::Right(OM::OMF { float, .. }) => assert_eq!(float, 3.14f64),
@@ -855,7 +855,7 @@ mod tests {
 
         let result = <OwnedTestString as OMDeserializable<'static>>::from_openmath(
             om,
-            crate::OPENMATH_BASE_URI.as_str(),
+            crate::OPENMATH_BASE_URI,
         )
         .expect("should be defined");
         match result {
@@ -886,7 +886,6 @@ mod tests {
                 }
             }
         }
-        let _ = tracing_subscriber::fmt().try_init();
         let s = r#"{
             "cdbase":"http://www.openmath.org/cd",
             "kind": "OMA",
@@ -926,7 +925,6 @@ mod tests {
                 }
             }
         }
-        let _ = tracing_subscriber::fmt().try_init();
         let s = r#"{
             "cdbase":"http://www.openmath.org/cd",
             "kind": "OMA",

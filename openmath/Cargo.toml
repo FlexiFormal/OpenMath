@@ -3,19 +3,27 @@ name = "openmath"
 version = "0.0.1"
 edition = "2024"
 
+authors = ["Dennis Müller <d.mueller@kwarc.info>"]
+description = "Support for OpenMath (de)serialization"
+readme = "README.md"
+repository = "https://github.com/FlexiFormal/OpenMath"
+license = "GPL-3.0-or-later"
+keywords = ["openmath"]
+categories = [
+    "encoding",
+    "data-structures",
+    "parser-implementations",
+    "mathematics",
+]
+exclude = ["./absolve.sh", "src/errors.rs"]
+
+
 [lints]
 workspace = true
 
 [features]
 ## Adds serde support
-serde = [
-    "dep:serde",
-    "url/serde",
-    "dep:serde_cow",
-    "ordered-float/serde",
-    "either/serde",
-    "smallvec/serde",
-]
+serde = ["dep:serde", "dep:serde_cow", "ordered-float/serde", "either/serde"]
 ## adds deserialization from xml; requires the [quick-xml](https://docs.rs/quick-xml) crate
 xml = ["dep:quick-xml"]
 
@@ -38,21 +46,13 @@ rustdoc-args = [
 rustc_version = "0.4"
 
 [dev-dependencies]
-tracing-subscriber = { workspace = true }
-tracing = { workspace = true }
-serde_json = { workspace = true }
+serde_json = { workspace = true, features = ["arbitrary_precision"] }
 
 [dependencies]
 document-features = { workspace = true }
-#adtenum = { workspace = true, features = ["strum", "strumbra", "bigint"] }
-url = { workspace = true }
 ordered-float = { workspace = true }
-#strumbra = { workspace = true }
-rustc-hash = { workspace = true }
 either = { workspace = true }
 smallvec = { workspace = true }
-impl-tools = { workspace = true }
-paste = { workspace = true }
 thiserror = { workspace = true }
 
 serde = { workspace = true, optional = true }

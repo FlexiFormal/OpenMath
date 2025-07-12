@@ -196,7 +196,7 @@ pub trait OMSerializable {
     #[cfg(feature = "serde")]
     #[inline]
     fn openmath_serde(&self) -> impl ::serde::Serialize + use<'_, Self> {
-        serde_impl::SerdeSerializer(self, self.cdbase(), crate::OPENMATH_BASE_URI.as_str())
+        serde_impl::SerdeSerializer(self, self.cdbase(), crate::OPENMATH_BASE_URI)
     }
 
     /// Returns something that [`Display`](std::fmt::Display)s
@@ -621,7 +621,6 @@ where
 */
 
 /// Wrapper that produces an OMOBJ wrapper in serialization
-#[impl_tools::autoimpl(Copy, Clone)]
 pub struct OMObject<'s, O: OMSerializable + ?Sized>(pub &'s O);
 impl<O: OMSerializable + ?Sized> OMObject<'_, O> {
     /// Returns something that `[Display]`(std::fmt::Display)s as the OpenMath XML
@@ -639,6 +638,13 @@ impl<O: OMSerializable + ?Sized> OMObject<'_, O> {
         }
     }
 }
+impl<O: OMSerializable + ?Sized> Clone for OMObject<'_, O> {
+    #[inline]
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<O: OMSerializable + ?Sized> Copy for OMObject<'_, O> {}
 impl<O: OMSerializable> std::fmt::Display for OMObject<'_, O> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "OMOBJ({})", self.0.openmath_display())
@@ -830,8 +836,14 @@ impl<A: OMSerializable, B: OMSerializable> OMSerializable for either::Either<A, 
 
 /// Simple [OMSerializer] that simply implements [Display](std::fmt::Display) and
 /// [Debug](std::fmt::Debug)
-#[impl_tools::autoimpl(Copy, Clone)]
 pub struct OMDisplay<'o, O: OMSerializable + ?Sized>(&'o O, Option<&'o str>);
+impl<O: OMSerializable + ?Sized> Clone for OMDisplay<'_, O> {
+    #[inline]
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<O: OMSerializable + ?Sized> Copy for OMDisplay<'_, O> {}
 impl<O: OMSerializable + ?Sized> std::fmt::Debug for OMDisplay<'_, O> {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -845,7 +857,7 @@ impl<O: OMSerializable + ?Sized> std::fmt::Display for OMDisplay<'_, O> {
             .as_openmath(DisplaySerializer {
                 f,
                 next_ns: self.1,
-                current_ns: crate::OPENMATH_BASE_URI.as_ref(),
+                current_ns: crate::OPENMATH_BASE_URI,
             })
             .map_err(Into::into)
     }
@@ -891,7 +903,7 @@ impl DisplaySerializer<'_, '_> {
                 DisplaySerializer {
                     f: self.f,
                     next_ns: Some(next),
-                    current_ns: crate::OPENMATH_BASE_URI.as_ref(),
+                    current_ns: crate::OPENMATH_BASE_URI,
                 }
             }
         } else {
@@ -1119,7 +1131,7 @@ pub mod testdoc {
         pub body: O,
     }
     impl<const LEN: usize, O> Lambda<'_, LEN, O> {
-        const URI: Uri<'static> = Uri {
+        pub const URI: Uri<'static> = Uri {
             cdbase: Some("http://openmath.org"),
             cd: "fns1",
             name: "lambda",

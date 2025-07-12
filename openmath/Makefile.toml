@@ -28,4 +28,5 @@ dependencies = [
 
 [tasks.doc]
 command = "cargo"
+install_crate = false
 args = ["+nightly", "doc", "--no-deps", "--all-features"]

@@ -10,11 +10,11 @@ A comprehensive Rust library for handling **<span style="font-variant:small-caps
   OpenMath JSON specification, specification-conform XML (de)serialization., official binary
   representation is WiP
 
-
 ## TODO
 
 - structure sharing via OMR
-- binary
+- binary format
+- official errors
 
 [1]: https://openmath.org/standard/om20-2019-07-01/omstd20.html
 [2]: https://openmath.org/cd/

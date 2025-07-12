@@ -20,11 +20,7 @@ pub use int::Int;
 use crate::ser::AsOMS;
 
 /// The base URI of official OᴘᴇɴMᴀᴛʜ dictionaries (`http://www.openmath.org/cd`)
-pub static OPENMATH_BASE_URI: std::sync::LazyLock<url::Url> = std::sync::LazyLock::new(||
-    // SAFETY: Known to be a valid Url
-    unsafe{
-        url::Url::parse("http://www.openmath.org/cd").unwrap_unchecked()
-    });
+pub const OPENMATH_BASE_URI: &str = "http://www.openmath.org/cd";
 
 /// XML namespace for OpenMath elements
 pub const XML_NAMESPACE: &str = "http://www.openmath.org/OpenMath";
@@ -173,10 +169,6 @@ omkinds! {
 ///<div class="openmath">
 /// OᴘᴇɴMᴀᴛʜ objects are built recursively as follows.
 /// </div>
-///
-/// Note that we do not implement the `OMATTR` case; that's because
-/// we use [`OpenMathObject`] instead of [`OpenMath`], which has a
-/// (possibly empty) field [attrs](OpenMathObject::attrs) for attributions.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum OpenMath<'om> {
@@ -284,7 +276,7 @@ pub enum OpenMath<'om> {
     } = OMKind::OMBIND as _,
 }
 
-/// A bound variable in an [`OMBIND`](OMExpr::OMBIND)
+/// A bound variable in an [`OMBIND`](OpenMath::OMBIND)
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BoundVariable<'om> {
     name: Cow<'om, str>,
@@ -303,7 +295,7 @@ impl ser::BindVar for &BoundVariable<'_> {
 
 /// An attribute in an [`OMATTR`](OMKind::OMATTR)
 ///
-/// Generic, so it can be reused in [OM](de::OM)
+/// Generic, so it can be reused in [OM]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Attr<'o, I> {
     pub cdbase: Option<Cow<'o, str>>,
@@ -328,9 +320,9 @@ where
     }
 }
 
-/// Either an [OpenMath Expression](OMExpr) or an [`OMFOREIGN`](OMKind::OMFOREIGN).
+/// Either an [OpenMath Expression](OpenMath) or an [`OMFOREIGN`](OMKind::OMFOREIGN).
 ///
-/// Generic, so it can be reused in [OM](de::OM)
+/// Generic, so it can be reused in [OM]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum OMMaybeForeign<'o, I> {
     // An OMExpr
@@ -545,4 +537,277 @@ impl<'o> de::OMDeserializable<'o> for OpenMath<'o> {
             },
         }))
     }
+}
+
+#[cfg(all(test, feature = "xml", feature = "serde"))]
+#[test]
+#[allow(clippy::too_many_lines)]
+fn roundtrip() {
+    use OpenMath::*;
+    const XML: &str = r#"<OMOBJ version="2.0" xmlns="http://www.openmath.org/OpenMath">
+      <OMBIND>
+        <OMS cdbase="http://openmath.org/cd" cd="fns1" name="lambda"/>
+        <OMBVAR>
+          <OMV name="x"/>
+          <OMATTR>
+            <OMATP>
+              <OMS cdbase="http://openmath.org/cd" cd="nope" name="type"/>
+              <OMS cdbase="http://openmath.org/cd" cd="arith1" name="real"/>
+            </OMATP>
+          <OMV name="y"/>
+          </OMATTR>
+        </OMBVAR>
+        <OMA>
+          <OMS cdbase="http://my.namespace" cd="utils" name="either"/>
+          <OMA>
+            <OMS cdbase="http://openmath.org/cd" cd="arith1" name="plus"/>
+            <OMI>128</OMI>
+            <OMATTR>
+              <OMATP>
+                <OMS cdbase="http://openmath.org/cd" cd="nope" name="type"/>
+                <OMFOREIGN>
+                  <MOOT>this is an opaque OMFOREIGN</MOOT>
+                </OMFOREIGN>
+              </OMATP>
+            <OMI>-1234567898765432123456789</OMI>
+            </OMATTR>
+            <OMF dec="3.88988"/>
+            <OMSTR>some number</OMSTR>
+            <OMV name="x"/>
+          </OMA>
+          <OME>
+            <OMS cdbase="http://openmath.org" cd="error" name="unhandled_arithmetics"/>
+            <OMFOREIGN encoding="application/nonsense">
+              ERROAR CODE MOO
+            </OMFOREIGN>
+          </OME>
+        </OMA>
+      </OMBIND>
+    </OMOBJ>"#;
+    const JSON: &str = r#"{
+      "kind": "OMOBJ",
+      "openmath": "2.0",
+      "object": {
+        "kind": "OMBIND",
+        "binder": {
+          "kind": "OMS",
+          "cdbase": "http://openmath.org/cd",
+          "cd": "fns1",
+          "name": "lambda"
+        },
+        "variables": [
+          {
+            "kind": "OMV",
+            "name": "x"
+          },
+          {
+            "kind": "OMATTR",
+            "attributes": [
+              [
+                {
+                  "kind": "OMS",
+                  "cdbase": "http://openmath.org/cd",
+                  "cd": "nope",
+                  "name": "type"
+                },
+                {
+                  "kind": "OMS",
+                  "cdbase": "http://openmath.org/cd",
+                  "cd": "arith1",
+                  "name": "real"
+                }
+              ]
+            ],
+            "object": {
+              "kind": "OMV",
+              "name": "y"
+            }
+          }
+        ],
+        "object": {
+          "kind": "OMA",
+          "applicant": {
+            "kind": "OMS",
+            "cdbase": "http://my.namespace",
+            "cd": "utils",
+            "name": "either"
+          },
+          "arguments": [
+            {
+              "kind": "OMA",
+              "applicant": {
+                "kind": "OMS",
+                "cdbase": "http://openmath.org/cd",
+                "cd": "arith1",
+                "name": "plus"
+              },
+              "arguments": [
+                {
+                  "kind": "OMI",
+                  "integer": 128
+                },
+                {
+                  "kind": "OMATTR",
+                  "attributes": [
+                    [
+                      {
+                        "kind": "OMS",
+                        "cdbase": "http://openmath.org/cd",
+                        "cd": "nope",
+                        "name": "type"
+                      },
+                      {
+                        "kind": "OMFOREIGN",
+                        "foreign": "<MOOT>this is an opaque OMFOREIGN</MOOT>"
+                      }
+                    ]
+                  ],
+                  "object": {
+                    "kind": "OMI",
+                    "integer": -1234567898765432123456789
+                  }
+                },
+                {
+                  "kind": "OMF",
+                  "float": 3.88988
+                },
+                {
+                  "kind": "OMSTR",
+                  "string": "some number"
+                },
+                {
+                  "kind": "OMV",
+                  "name": "x"
+                }
+              ]
+            },
+            {
+              "kind": "OME",
+              "error": {
+                "kind": "OMS",
+                "cdbase": "http://openmath.org",
+                "cd": "error",
+                "name": "unhandled_arithmetics"
+              },
+              "arguments": [
+                {
+                  "kind": "OMFOREIGN",
+                  "foreign": "ERROAR CODE MOO",
+                  "encoding": "application/nonsense"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }"#;
+
+    let om = OMBIND {
+        binder: Box::new(OMS {
+            cdbase: Some(Cow::Borrowed("http://openmath.org/cd")),
+            cd: Cow::Borrowed("fns1"),
+            name: Cow::Borrowed("lambda"),
+            attributes: Vec::new(),
+        }),
+        variables: vec![
+            BoundVariable {
+                name: Cow::Borrowed("x"),
+                attributes: Vec::new(),
+            },
+            BoundVariable {
+                name: Cow::Borrowed("y"),
+                attributes: vec![Attr {
+                    cdbase: Some(Cow::Borrowed("http://openmath.org/cd")),
+                    cd: Cow::Borrowed("nope"),
+                    name: Cow::Borrowed("type"),
+                    value: OMMaybeForeign::OM(OMS {
+                        cdbase: Some(Cow::Borrowed("http://openmath.org/cd")),
+                        cd: Cow::Borrowed("arith1"),
+                        name: Cow::Borrowed("real"),
+                        attributes: Vec::new(),
+                    }),
+                }],
+            },
+        ],
+        object: Box::new(OMA {
+            applicant: Box::new(OMS {
+                cd: Cow::Borrowed("utils"),
+                name: Cow::Borrowed("either"),
+                cdbase: Some(Cow::Borrowed("http://my.namespace")),
+                attributes: Vec::new(),
+            }),
+            arguments: vec![
+                OMA {
+                    applicant: Box::new(OMS {
+                        cdbase: Some(Cow::Borrowed("http://openmath.org/cd")),
+                        cd: Cow::Borrowed("arith1"),
+                        name: Cow::Borrowed("plus"),
+                        attributes: Vec::new(),
+                    }),
+                    arguments: vec![
+                        OMI {
+                            int: 128.into(),
+                            attributes: Vec::new(),
+                        },
+                        OMI {
+                            int: Int::new("-1234567898765432123456789").expect("works"),
+                            attributes: vec![Attr {
+                                cdbase: Some(Cow::Borrowed("http://openmath.org/cd")),
+                                cd: Cow::Borrowed("nope"),
+                                name: Cow::Borrowed("type"),
+                                value: OMMaybeForeign::Foreign {
+                                    encoding: None,
+                                    value: Cow::Borrowed(
+                                        "<MOOT>this is an opaque OMFOREIGN</MOOT>",
+                                    ),
+                                },
+                            }],
+                        },
+                        OMF {
+                            float: 3.88988.into(),
+                            attributes: Vec::new(),
+                        },
+                        OMSTR {
+                            string: Cow::Borrowed("some number"),
+                            attributes: Vec::new(),
+                        },
+                        OMV {
+                            name: Cow::Borrowed("x"),
+                            attributes: Vec::new(),
+                        },
+                    ],
+                    attributes: Vec::new(),
+                },
+                OME {
+                    cdbase: Some(Cow::Borrowed("http://openmath.org")),
+                    cd: Cow::Borrowed("error"),
+                    name: Cow::Borrowed("unhandled_arithmetics"),
+                    arguments: vec![OMMaybeForeign::Foreign {
+                        encoding: Some(Cow::Borrowed("application/nonsense")),
+                        value: Cow::Borrowed("ERROAR CODE MOO"),
+                    }],
+                    attributes: Vec::new(),
+                },
+            ],
+            attributes: Vec::new(),
+        }),
+        attributes: Vec::new(),
+    };
+
+    let json = serde_json::to_string_pretty(&ser::OMObject(&om)).expect("works");
+    assert_eq!(
+        json.replace(|c: char| c.is_ascii_whitespace(), ""),
+        JSON.replace(|c: char| c.is_ascii_whitespace(), "")
+    );
+    let nom = serde_json::from_str::<'_, de::OMObject<OpenMath<'_>>>(&json)
+        .expect("works")
+        .into_inner();
+    assert_eq!(om, nom);
+    let xml = ser::OMObject(&nom).xml(true, true).to_string();
+    assert_eq!(
+        xml.replace(|c: char| c.is_ascii_whitespace(), ""),
+        XML.replace(|c: char| c.is_ascii_whitespace(), "")
+    );
+    let nom = de::OMObject::<OpenMath<'_>>::from_openmath_xml(&xml).expect("works");
+    assert_eq!(om, nom);
 }

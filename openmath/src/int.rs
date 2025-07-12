@@ -57,120 +57,6 @@ pub enum I<'l> {
     Heap(Cow<'l, str>),
 }
 
-#[cfg(feature = "serde")]
-impl serde::Serialize for I<'_> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            I::Stack(n) => serializer.serialize_i128(*n),
-            I::Heap(s) => serializer.serialize_str(s),
-        }
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for I<'de> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        use serde::de::{Error, Visitor};
-
-        struct IntVisitor;
-
-        impl<'de> Visitor<'de> for IntVisitor {
-            type Value = I<'de>;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("an integer or string")
-            }
-
-            fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                Ok(I::Stack(value.into()))
-            }
-
-            fn visit_i128<E>(self, value: i128) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                Ok(I::Stack(value))
-            }
-
-            fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                Ok(I::Stack(value.into()))
-            }
-
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                // Try to parse as i128 first
-                if let Ok(n) = value.parse::<i128>() {
-                    Ok(I::Stack(n))
-                } else {
-                    // Validate it's a valid integer string
-                    let mut chars = value.as_bytes();
-                    if chars.is_empty() {
-                        return Err(E::custom("empty string"));
-                    }
-                    if chars[0] == b'+' || chars[0] == b'-' {
-                        chars = &chars[1..];
-                    }
-                    if chars.iter().all(u8::is_ascii_digit) {
-                        Ok(I::Heap(std::borrow::Cow::Owned(value.to_string())))
-                    } else {
-                        Err(E::custom("invalid integer string"))
-                    }
-                }
-            }
-
-            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                // Try to parse as i128 first
-                if let Ok(n) = value.parse::<i128>() {
-                    Ok(I::Stack(n))
-                } else {
-                    // Validate it's a valid integer string
-                    let mut chars = value.as_bytes();
-                    if chars.is_empty() {
-                        return Err(E::custom("empty string"));
-                    }
-                    if chars[0] == b'+' || chars[0] == b'-' {
-                        chars = &chars[1..];
-                    }
-                    if chars.iter().all(u8::is_ascii_digit) {
-                        Ok(I::Heap(std::borrow::Cow::Owned(value)))
-                    } else {
-                        Err(E::custom("invalid integer string"))
-                    }
-                }
-            }
-        }
-
-        deserializer.deserialize_any(IntVisitor)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for Int<'de> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        I::deserialize(deserializer).map(Int)
-    }
-}
-
 macro_rules! into {
     ($($t:ty),*) => {
         $(
@@ -395,6 +281,288 @@ impl Int<'_> {
             I::Heap(Cow::Owned(s)) => Int(I::Heap(Cow::Owned(s))),
             I::Heap(b) => Int(I::Heap(Cow::Owned(b.into_owned()))),
         }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Int<'de> {
+    #[inline]
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        I::deserialize(deserializer).map(Int)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for I<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            I::Stack(n) => serializer.serialize_i128(*n),
+            I::Heap(s) => serializer.serialize_str(s),
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for I<'de> {
+    #[allow(clippy::too_many_lines)]
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::{Error, Visitor};
+
+        struct IntVisitor;
+
+        impl<'de> Visitor<'de> for IntVisitor {
+            type Value = I<'de>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("an integer or string")
+            }
+
+            fn visit_map<V>(self, mut visitor: V) -> Result<Self::Value, V::Error>
+            where
+                V: serde::de::MapAccess<'de>,
+            {
+                struct IntKey;
+                const TOKEN: &str = "$serde_json::private::Number";
+                impl<'de> serde::de::Deserialize<'de> for IntKey {
+                    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+                    where
+                        D: serde::de::Deserializer<'de>,
+                    {
+                        struct FieldVisitor;
+
+                        impl serde::de::Visitor<'_> for FieldVisitor {
+                            type Value = ();
+
+                            fn expecting(
+                                &self,
+                                formatter: &mut std::fmt::Formatter,
+                            ) -> std::fmt::Result {
+                                formatter.write_str("a valid number field")
+                            }
+
+                            fn visit_str<E>(self, s: &str) -> Result<(), E>
+                            where
+                                E: serde::de::Error,
+                            {
+                                if s == TOKEN {
+                                    Ok(())
+                                } else {
+                                    Err(serde::de::Error::custom("expected field with custom name"))
+                                }
+                            }
+                        }
+
+                        deserializer.deserialize_identifier(FieldVisitor)?;
+                        Ok(Self)
+                    }
+                }
+                struct MapInt<'de>(I<'de>);
+                impl<'de> serde::de::Deserialize<'de> for MapInt<'de> {
+                    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+                    where
+                        D: serde::de::Deserializer<'de>,
+                    {
+                        use std::marker::PhantomData;
+
+                        struct Visitor<'de>(PhantomData<&'de ()>);
+
+                        impl<'de> serde::de::Visitor<'de> for Visitor<'de> {
+                            type Value = MapInt<'de>;
+
+                            fn expecting(
+                                &self,
+                                formatter: &mut std::fmt::Formatter,
+                            ) -> std::fmt::Result {
+                                formatter.write_str("string containing a number")
+                            }
+
+                            fn visit_borrowed_str<E>(self, s: &'de str) -> Result<Self::Value, E>
+                            where
+                                E: Error,
+                            {
+                                let n = Int::new(s)
+                                    .ok_or_else(|| serde::de::Error::custom("invalid integer"))?;
+                                Ok(MapInt(n.0))
+                            }
+
+                            fn visit_str<E>(self, s: &str) -> Result<MapInt<'de>, E>
+                            where
+                                E: serde::de::Error,
+                            {
+                                let n = Int::new(s)
+                                    .ok_or_else(|| serde::de::Error::custom("invalid integer"))?;
+                                Ok(MapInt(n.into_owned().0))
+                            }
+                        }
+
+                        deserializer.deserialize_str(Visitor(PhantomData))
+                    }
+                }
+
+                let value = visitor.next_key::<IntKey>()?;
+                if value.is_none() {
+                    return Err(serde::de::Error::invalid_type(
+                        serde::de::Unexpected::Map,
+                        &self,
+                    ));
+                }
+                let v: MapInt = visitor.next_value()?;
+                Ok(v.0)
+            }
+
+            fn visit_i128<E>(self, value: i128) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                Ok(I::Stack(value))
+            }
+
+            fn visit_u128<E>(self, value: u128) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                Ok(I::Heap(Cow::Owned(value.to_string())))
+            }
+
+            fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                Ok(I::Stack(value.into()))
+            }
+
+            fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                Ok(I::Stack(value.into()))
+            }
+
+            fn visit_i32<E>(self, value: i32) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                Ok(I::Stack(value.into()))
+            }
+
+            fn visit_u32<E>(self, value: u32) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                Ok(I::Stack(value.into()))
+            }
+
+            fn visit_i16<E>(self, value: i16) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                Ok(I::Stack(value.into()))
+            }
+
+            fn visit_u16<E>(self, value: u16) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                Ok(I::Stack(value.into()))
+            }
+
+            fn visit_i8<E>(self, value: i8) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                Ok(I::Stack(value.into()))
+            }
+
+            fn visit_u8<E>(self, value: u8) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                Ok(I::Stack(value.into()))
+            }
+
+            fn visit_borrowed_str<E>(self, value: &'de str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                // Try to parse as i128 first
+                if let Ok(n) = value.parse::<i128>() {
+                    Ok(I::Stack(n))
+                } else {
+                    // Validate it's a valid integer string
+                    let mut chars = value.as_bytes();
+                    if chars.is_empty() {
+                        return Err(E::custom("empty string"));
+                    }
+                    if chars[0] == b'+' || chars[0] == b'-' {
+                        chars = &chars[1..];
+                    }
+                    if chars.iter().all(u8::is_ascii_digit) {
+                        Ok(I::Heap(std::borrow::Cow::Borrowed(value)))
+                    } else {
+                        Err(E::custom("invalid integer string"))
+                    }
+                }
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                // Try to parse as i128 first
+                if let Ok(n) = value.parse::<i128>() {
+                    Ok(I::Stack(n))
+                } else {
+                    // Validate it's a valid integer string
+                    let mut chars = value.as_bytes();
+                    if chars.is_empty() {
+                        return Err(E::custom("empty string"));
+                    }
+                    if chars[0] == b'+' || chars[0] == b'-' {
+                        chars = &chars[1..];
+                    }
+                    if chars.iter().all(u8::is_ascii_digit) {
+                        Ok(I::Heap(std::borrow::Cow::Owned(value.to_string())))
+                    } else {
+                        Err(E::custom("invalid integer string"))
+                    }
+                }
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                // Try to parse as i128 first
+                if let Ok(n) = value.parse::<i128>() {
+                    Ok(I::Stack(n))
+                } else {
+                    // Validate it's a valid integer string
+                    let mut chars = value.as_bytes();
+                    if chars.is_empty() {
+                        return Err(E::custom("empty string"));
+                    }
+                    if chars[0] == b'+' || chars[0] == b'-' {
+                        chars = &chars[1..];
+                    }
+                    if chars.iter().all(u8::is_ascii_digit) {
+                        Ok(I::Heap(std::borrow::Cow::Owned(value)))
+                    } else {
+                        Err(E::custom("invalid integer string"))
+                    }
+                }
+            }
+        }
+
+        deserializer.deserialize_any(IntVisitor)
     }
 }
 

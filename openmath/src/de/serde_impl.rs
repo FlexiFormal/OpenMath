@@ -202,15 +202,10 @@ where
     where
         D: serde::Deserializer<'de>,
     {
-        OMDeInner(
-            Cow::Borrowed(crate::OPENMATH_BASE_URI.as_str()),
-            PhantomData,
-        )
-        .deserialize(deserializer)
+        OMDeInner(Cow::Borrowed(crate::OPENMATH_BASE_URI), PhantomData).deserialize(deserializer)
     }
 }
 
-#[impl_tools::autoimpl(Clone)]
 struct OMDeInner<'de, 's, OMD>(Cow<'s, str>, PhantomData<(&'de (), OMD)>)
 where
     OMD: OMDeserializable<'de>;
@@ -251,6 +246,12 @@ macro_rules! all_fields {
                     _ => Self::__ignore
                 }
             }
+            const fn as_str(&self) -> &'static str {
+                match self {
+                    $(Self::$name => stringify!("$name")),*,
+                    Self::__ignore => "__ignore"
+                }
+            }
         }
         impl std::fmt::Display for AllFields {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -288,10 +289,10 @@ all_fields! {
     attributes
 }
 
-#[impl_tools::autoimpl(Default)]
+#[derive(Default)]
 struct FieldState<'de> {
     id: Option<CowStr<'de>>,
-    integer: Option<i64>,
+    integer: Option<crate::Int<'de>>,
     decimal: Option<CowStr<'de>>,
     hexadecimal: Option<CowStr<'de>>,
     float: Option<f64>,
@@ -690,7 +691,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
     fn visit_map_omi<A>(
         self,
         _id: Option<&str>,
-        mut integer: Option<i64>,
+        mut integer: Option<crate::Int<'de>>,
         mut decimal: Option<CowStr<'de>>,
         mut hexadecimal: Option<CowStr<'de>>,
         mut map: A,
@@ -714,14 +715,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
                     "OMI can not have more than one of the fields `integer`, `decimal`, `hexadecimal`",
                 ));
             }
-            return OMD::from_openmath(
-                OM::OMI {
-                    int: int.into(),
-                    attrs,
-                },
-                &self.0,
-            )
-            .map_err(A::Error::custom);
+            return OMD::from_openmath(OM::OMI { int, attrs }, &self.0).map_err(A::Error::custom);
         }
         if let Some(d) = decimal {
             if hexadecimal.is_some() {
@@ -1739,7 +1733,6 @@ struct OMS<'s> {
     name: CowStr<'s>,
 }
 
-#[impl_tools::autoimpl(Clone, Copy)]
 struct OMSeq<'de, 's, OMD>(&'s str, PhantomData<(&'de (), OMD)>)
 //()
 where
@@ -1793,7 +1786,6 @@ where
     }
 }
 
-#[impl_tools::autoimpl(Clone, Copy)]
 struct OMForeignSeq<'de, 's, OMD>(&'s str, PhantomData<(&'de (), OMD)>)
 //()
 where
@@ -1847,7 +1839,6 @@ where
     }
 }
 
-#[impl_tools::autoimpl(Clone)]
 struct OMDeForeign<'de, 's, OMD>(&'s str, PhantomData<(&'de (), OMD)>)
 where
     OMD: OMDeserializable<'de>;
@@ -2061,7 +2052,15 @@ where
     where
         D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_seq(self)
+        const FIELDS: &[&str] = &[
+            AllFields::kind.as_str(),
+            AllFields::id.as_str(),
+            AllFields::name.as_str(),
+            AllFields::cdbase.as_str(),
+            AllFields::attributes.as_str(),
+            AllFields::object.as_str(),
+        ];
+        deserializer.deserialize_struct("OMBVAR", FIELDS, self)
     }
 }
 impl<'de, OMD> serde::de::Visitor<'de> for OMVarA<'de, '_, '_, OMD>
@@ -2072,7 +2071,7 @@ where
 
     #[inline]
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("an OMATP pais")
+        formatter.write_str("a variable")
     }
 
     #[inline]
