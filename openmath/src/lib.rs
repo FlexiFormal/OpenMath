@@ -425,16 +425,14 @@ impl ser::OMSerializable for OpenMath<'_> {
 }
 
 impl<'o> de::OMDeserializable<'o> for OpenMath<'o> {
+    type Ret = Self;
     type Err = Infallible;
     #[allow(clippy::too_many_lines)]
-    fn from_openmath(
-        om: OM<'o, Self>,
-        cdbase: &str,
-    ) -> Result<either::Either<Self, OM<'o, Self>>, Self::Err>
+    fn from_openmath(om: OM<'o, Self>, cdbase: &str) -> Result<Self, Self::Err>
     where
         Self: Sized,
     {
-        fn do_attrs<'o>(
+        /*fn do_attrs<'o>(
             attrs: Vec<de::OMAttr<'o, OpenMath<'o>>>,
         ) -> Vec<Attr<'o, OMMaybeForeign<'o, OpenMath<'o>>>> {
             attrs
@@ -454,45 +452,42 @@ impl<'o> de::OMDeserializable<'o> for OpenMath<'o> {
                     },
                 })
                 .collect()
-        }
-        Ok(either::Either::Left(match om {
+        }*/
+        Ok(match om {
             OM::OMI { int, attrs } => Self::OMI {
                 int,
-                attributes: do_attrs(attrs),
+                attributes: attrs,
             },
             OM::OMF { float, attrs } => Self::OMF {
                 float: float.into(),
-                attributes: do_attrs(attrs),
+                attributes: attrs,
             },
             OM::OMSTR { string, attrs } => Self::OMSTR {
                 string,
-                attributes: do_attrs(attrs),
+                attributes: attrs,
             },
             OM::OMB { bytes, attrs } => Self::OMB {
                 bytes,
-                attributes: do_attrs(attrs),
+                attributes: attrs,
             },
             OM::OMV { name, attrs } => Self::OMV {
                 name,
-                attributes: do_attrs(attrs),
+                attributes: attrs,
             },
             OM::OMS { cd, name, attrs } => Self::OMS {
                 cd,
                 name,
                 cdbase: Some(Cow::Owned(cdbase.to_string())),
-                attributes: do_attrs(attrs),
+                attributes: attrs,
             },
             OM::OMA {
                 applicant,
                 arguments,
                 attrs,
             } => Self::OMA {
-                applicant: Box::new(applicant.expect_left("by construction")),
-                arguments: arguments
-                    .into_iter()
-                    .map(|e| e.expect_left("by construction"))
-                    .collect(),
-                attributes: do_attrs(attrs),
+                applicant: Box::new(applicant),
+                arguments,
+                attributes: attrs,
             },
             OM::OMBIND {
                 binder,
@@ -500,16 +495,16 @@ impl<'o> de::OMDeserializable<'o> for OpenMath<'o> {
                 object,
                 attrs,
             } => Self::OMBIND {
-                binder: Box::new(binder.expect_left("by construction")),
+                binder: Box::new(binder),
                 variables: variables
                     .into_iter()
                     .map(|(name, a)| BoundVariable {
                         name,
-                        attributes: do_attrs(a),
+                        attributes: a,
                     })
                     .collect(),
-                object: Box::new(object.expect_left("by construction")),
-                attributes: do_attrs(attrs),
+                object: Box::new(object),
+                attributes: attrs,
             },
             OM::OME {
                 cdbase,
@@ -521,21 +516,10 @@ impl<'o> de::OMDeserializable<'o> for OpenMath<'o> {
                 cd,
                 name,
                 cdbase,
-                arguments: arguments
-                    .into_iter()
-                    .map(|e| match e {
-                        either::Either::Left(e) => OMMaybeForeign::OM(e),
-                        either::Either::Right(OMMaybeForeign::Foreign { encoding, value }) => {
-                            OMMaybeForeign::Foreign { encoding, value }
-                        }
-                        either::Either::Right(OMMaybeForeign::OM(_)) => {
-                            unreachable!("by construction")
-                        }
-                    })
-                    .collect(),
-                attributes: do_attrs(attrs),
+                arguments,
+                attributes: attrs,
             },
-        }))
+        })
     }
 }
 

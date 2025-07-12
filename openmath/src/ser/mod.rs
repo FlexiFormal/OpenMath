@@ -661,9 +661,9 @@ pub trait AsOMS {
         None
     }
     /// The cd of this URI
-    fn cd(&self) -> &impl std::fmt::Display;
+    fn cd(&self) -> impl std::fmt::Display;
     /// The name of the symbol represented by this URI
-    fn name(&self) -> &impl std::fmt::Display;
+    fn name(&self) -> impl std::fmt::Display;
     fn as_oms(&self) -> impl OMSerializable {
         struct AsOM<'a, A: AsOMS + ?Sized>(&'a A);
         impl<A: AsOMS + ?Sized> OMSerializable for AsOM<'_, A> {
@@ -684,11 +684,11 @@ impl<A: AsOMS + ?Sized> AsOMS for &A {
         A::cdbase(self, current_cdbase)
     }
     #[inline]
-    fn cd(&self) -> &impl std::fmt::Display {
+    fn cd(&self) -> impl std::fmt::Display {
         A::cd(self)
     }
     #[inline]
-    fn name(&self) -> &impl std::fmt::Display {
+    fn name(&self) -> impl std::fmt::Display {
         A::name(self)
     }
 }
@@ -730,11 +730,11 @@ where
             .and_then(|s| if s == current_cdbase { None } else { Some(s) })
     }
     #[inline]
-    fn cd(&self) -> &impl std::fmt::Display {
+    fn cd(&self) -> impl std::fmt::Display {
         &self.cd
     }
     #[inline]
-    fn name(&self) -> &impl std::fmt::Display {
+    fn name(&self) -> impl std::fmt::Display {
         &self.name
     }
 }

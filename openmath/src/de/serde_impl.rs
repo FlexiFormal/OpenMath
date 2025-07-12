@@ -22,15 +22,14 @@
 #![allow(clippy::upper_case_acronyms)]
 #![allow(clippy::type_complexity)]
 
-use either::Either::{Left, Right};
 use serde::{Deserialize, de::DeserializeSeed};
 use serde_cow::{CowBytes, CowStr};
 
-use crate::{OMDeserializable, OMKind, de::OM, either::Either};
+use crate::{OMDeserializable, OMKind, de::OM};
 use std::{borrow::Cow, marker::PhantomData};
 
 type Attr<'e, I> = crate::Attr<'e, OMForeign<'e, I>>;
-type OMForeign<'e, I> = Either<I, crate::OMMaybeForeign<'e, OM<'e, I>>>;
+type OMForeign<'e, I> = crate::OMMaybeForeign<'e, <I as OMDeserializable<'e>>::Ret>;
 
 impl<'de, O: OMDeserializable<'de> + 'de> serde::Deserialize<'de> for super::OMObject<'de, O> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -90,19 +89,14 @@ impl<'de, O: OMDeserializable<'de> + 'de> serde::Deserialize<'de> for super::OMO
                         Fields::object if cdbase.is_some() => {
                             let cdbase = unsafe { cdbase.take().unwrap_unchecked() };
                             obj = Some(
-                                match map.next_value_seed(OMDeInner(cdbase, PhantomData))?.0 {
-                                    Left(o) => o,
-                                    Right(e) => {
-                                        return Err(A::Error::custom(format!(
-                                            "OpenMath object does not represent a valid instance of {}: {e:?}",
-                                            std::any::type_name::<O>(),
-                                        )));
-                                    }
-                                },
+                                map.next_value_seed(OMDeInner::<O>(cdbase, PhantomData))?.0.try_into().map_err(|e| A::Error::custom(format!(
+                                    "OpenMath object does not represent a valid instance of {}: {e:?}",
+                                    std::any::type_name::<O>(),
+                                )))?
                             );
                         }
                         Fields::object => {
-                            obj = Some(map.next_value::<OMFromSerde<_>>()?.0);
+                            obj = Some(map.next_value::<OMFromSerde<O>>()?.0);
                         }
                     }
                 }
@@ -180,17 +174,20 @@ where
         D: serde::Deserializer<'de>,
     {
         use serde::de::Error;
-        match OMDe::<'de, OMD>::deserialize(deserializer)?.0 {
-            Left(o) => Ok(Self(o)),
-            Right(e) => Err(D::Error::custom(format!(
-                "OpenMath object does not represent a valid instance of {}: {e:?}",
-                std::any::type_name::<OMD>(),
-            ))),
-        }
+        OMDe::<'de, OMD>::deserialize(deserializer)?
+            .0
+            .try_into()
+            .map_err(|e| {
+                D::Error::custom(format!(
+                    "OpenMath object does not represent a valid instance of {}: {e:?}",
+                    std::any::type_name::<OMD>()
+                ))
+            })
+            .map(OMFromSerde)
     }
 }
 
-struct OMDe<'de, OMD>(Either<OMD, super::OM<'de, OMD>>, PhantomData<&'de ()>)
+struct OMDe<'de, OMD>(OMD::Ret, PhantomData<&'de ()>)
 where
     OMD: OMDeserializable<'de>;
 
@@ -325,7 +322,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         _id: Option<CowStr<'de>>,
         attrs: Vec<Attr<'de, OMD>>,
         mut seq: A,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -342,7 +339,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         _id: Option<CowStr<'de>>,
         attrs: Vec<Attr<'de, OMD>>,
         mut seq: A,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -359,7 +356,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         _id: Option<CowStr<'de>>,
         attrs: Vec<Attr<'de, OMD>>,
         mut seq: A,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -377,7 +374,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         _id: Option<CowStr<'de>>,
         attrs: Vec<Attr<'de, OMD>>,
         mut seq: A,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -395,7 +392,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         _id: Option<CowStr<'de>>,
         attrs: Vec<Attr<'de, OMD>>,
         mut seq: A,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -413,7 +410,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         _id: Option<CowStr<'de>>,
         attrs: Vec<Attr<'de, OMD>>,
         mut seq: A,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -449,7 +446,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         _id: Option<CowStr<'de>>,
         attrs: Vec<Attr<'de, OMD>>,
         mut seq: A,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -470,7 +467,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
             return Err(A::Error::custom("missing error in OME"));
         };
         let arguments = seq
-            .next_element_seed(OMForeignSeq(cdbase_i, PhantomData))?
+            .next_element_seed(OMForeignSeq::<OMD>(cdbase_i, PhantomData))?
             .unwrap_or_default();
         //cdbase.as_ref().map_or::<&str, _>(&self.0, |s| s.as_ref());
 
@@ -493,7 +490,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         _id: Option<CowStr<'de>>,
         attrs: Vec<Attr<'de, OMD>>,
         mut seq: A,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -513,13 +510,13 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         };
 
         let args = seq
-            .next_element_seed(OMSeq(cdbase, PhantomData))?
+            .next_element_seed(OMSeq::<OMD>(cdbase, PhantomData))?
             .unwrap_or_default();
 
         while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
         OMD::from_openmath(
             OM::OMA {
-                applicant: head.0.map_right(Box::new),
+                applicant: head.0,
                 arguments: args,
                 attrs,
             },
@@ -533,7 +530,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         _id: Option<CowStr<'de>>,
         attrs: Vec<Attr<'de, OMD>>,
         mut seq: A,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -552,7 +549,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
             return Err(A::Error::custom("missing binder in OMBIND"));
         };
 
-        let Some(context) = seq.next_element_seed(OMVarSeq(cdbase, PhantomData))? else {
+        let Some(context) = seq.next_element_seed(OMVarSeq::<OMD>(cdbase, PhantomData))? else {
             return Err(A::Error::custom("missing variables in OMBIND"));
         };
 
@@ -567,9 +564,9 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
         OMD::from_openmath(
             OM::OMBIND {
-                binder: head.0.map_right(Box::new),
+                binder: head.0,
                 variables: context,
-                object: body.0.map_right(Box::new),
+                object: body.0,
                 attrs,
             },
             cdbase,
@@ -582,7 +579,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         _id: Option<CowStr<'de>>,
         mut attrs: Vec<Attr<'de, OMD>>,
         mut seq: A,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -592,7 +589,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         };
         let cdbase = cdbase.unwrap_or(&self.0);
 
-        let Some(()) = seq.next_element_seed(OMAttrSeq(&self.0, &mut attrs))? else {
+        let Some(()) = seq.next_element_seed(OMAttrSeq::<OMD>(&self.0, &mut attrs))? else {
             return Err(A::Error::custom("missing attributions in OMATTR"));
         };
 
@@ -604,7 +601,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         Ok(object.0)
     }
 
-    fn visit_seq_omforeign<A>(mut seq: A) -> Result<OMForeign<'de, OMD>, A::Error>
+    fn visit_seq_omforeign<A>(mut seq: A) -> Result<crate::OMMaybeForeign<'de, OMD::Ret>, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -619,10 +616,10 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
             .unwrap_or_default()
             .map(|e| e.0);
         while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
-        Ok(Either::Right(crate::OMMaybeForeign::Foreign {
+        Ok(crate::OMMaybeForeign::Foreign {
             encoding,
             value: foreign,
-        }))
+        })
     }
 
     // ---------------------------------------------------------------
@@ -635,14 +632,14 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         mut object: Option<serde::__private::de::Content<'de>>,
         mut map: A,
         mut attrs: Vec<Attr<'de, OMD>>,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
         use serde::de::Error;
 
         let mut had_attrs = if let Some(attributes) = attributes {
-            OMAttrSeq(cdbase.as_ref().map_or(&self.0, |e| &*e.0), &mut attrs)
+            OMAttrSeq::<OMD>(cdbase.as_ref().map_or(&self.0, |e| &*e.0), &mut attrs)
                 .deserialize(serde::__private::de::ContentDeserializer::new(attributes))?;
             true
         } else {
@@ -653,7 +650,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
             match key {
                 AllFields::cdbase => cdbase = Some(map.next_value()?),
                 AllFields::attributes => {
-                    map.next_value_seed(OMAttrSeq(
+                    map.next_value_seed(OMAttrSeq::<OMD>(
                         cdbase.as_ref().map_or(&self.0, |e| &*e.0),
                         &mut attrs,
                     ))?;
@@ -661,7 +658,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
                 }
                 AllFields::object if had_attrs => {
                     return map
-                        .next_value_seed(OMWithAttrs(
+                        .next_value_seed(OMWithAttrs::<OMD>(
                             Cow::Borrowed(cdbase.as_ref().map_or(&self.0, |e| &*e.0)),
                             attrs,
                         ))
@@ -677,7 +674,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         }
 
         if let Some(object) = object {
-            OMWithAttrs(
+            OMWithAttrs::<OMD>(
                 Cow::Borrowed(cdbase.as_ref().map_or(&self.0, |e| &*e.0)),
                 attrs,
             )
@@ -696,7 +693,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         mut hexadecimal: Option<CowStr<'de>>,
         mut map: A,
         attrs: Vec<Attr<'de, OMD>>,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
@@ -750,7 +747,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         mut hexadecimal: Option<CowStr<'de>>,
         mut map: A,
         attrs: Vec<Attr<'de, OMD>>,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
@@ -803,7 +800,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         mut string: Option<CowStr<'de>>,
         mut map: A,
         attrs: Vec<Attr<'de, OMD>>,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
@@ -832,7 +829,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         mut base64: Option<CowStr<'de>>,
         mut map: A,
         attrs: Vec<Attr<'de, OMD>>,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
@@ -877,7 +874,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         mut name: Option<CowStr<'de>>,
         mut map: A,
         attrs: Vec<Attr<'de, OMD>>,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
@@ -911,7 +908,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         mut name: Option<CowStr<'de>>,
         mut map: A,
         attrs: Vec<Attr<'de, OMD>>,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
@@ -953,7 +950,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         arguments: Option<serde::__private::de::Content<'de>>,
         mut map: A,
         attrs: Vec<Attr<'de, OMD>>,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
@@ -967,7 +964,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         };
         let mut arguments = if let Some(arguments) = arguments {
             Some(
-                OMForeignSeq(cdbase.as_ref().map_or(&self.0, |e| &*e.0), PhantomData)
+                OMForeignSeq::<OMD>(cdbase.as_ref().map_or(&self.0, |e| &*e.0), PhantomData)
                     .deserialize(serde::__private::de::ContentDeserializer::new(arguments))?,
             )
         } else {
@@ -978,7 +975,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
                 AllFields::cdbase => cdbase = Some(map.next_value()?),
                 AllFields::error => error = Some(map.next_value()?),
                 AllFields::arguments => {
-                    arguments = Some(map.next_value_seed(OMForeignSeq(
+                    arguments = Some(map.next_value_seed(OMForeignSeq::<OMD>(
                         cdbase.as_ref().map_or(&self.0, |e| &*e.0),
                         PhantomData,
                     ))?);
@@ -1015,14 +1012,14 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         arguments: Option<serde::__private::de::Content<'de>>,
         mut map: A,
         attrs: Vec<Attr<'de, OMD>>,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
         use serde::de::Error;
         let mut applicant = if let Some(applicant) = applicant {
             Some(
-                OMDeInner(
+                OMDeInner::<OMD>(
                     Cow::Borrowed(cdbase.as_ref().map_or(&self.0, |e| &*e.0)),
                     PhantomData,
                 )
@@ -1033,7 +1030,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         };
         let mut arguments = if let Some(arguments) = arguments {
             Some(
-                OMSeq(cdbase.as_ref().map_or(&self.0, |e| &*e.0), PhantomData)
+                OMSeq::<OMD>(cdbase.as_ref().map_or(&self.0, |e| &*e.0), PhantomData)
                     .deserialize(serde::__private::de::ContentDeserializer::new(arguments))?,
             )
         } else {
@@ -1049,7 +1046,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
                     ))?);
                 }
                 AllFields::arguments => {
-                    arguments = Some(map.next_value_seed(OMSeq(
+                    arguments = Some(map.next_value_seed(OMSeq::<OMD>(
                         cdbase.as_ref().map_or(&self.0, |e| &*e.0),
                         PhantomData,
                     ))?);
@@ -1063,7 +1060,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         if let Some(head) = applicant {
             return OMD::from_openmath(
                 OM::OMA {
-                    applicant: head.0.map_right(Box::new),
+                    applicant: head.0,
                     arguments: arguments.unwrap_or_default(),
                     attrs,
                 },
@@ -1084,14 +1081,14 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         object: Option<serde::__private::de::Content<'de>>,
         mut map: A,
         attrs: Vec<Attr<'de, OMD>>,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
         use serde::de::Error;
         let mut binder = if let Some(binder) = binder {
             Some(
-                OMDeInner(
+                OMDeInner::<OMD>(
                     Cow::Borrowed(cdbase.as_ref().map_or(&self.0, |e| &*e.0)),
                     PhantomData,
                 )
@@ -1102,7 +1099,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         };
         let mut object = if let Some(object) = object {
             Some(
-                OMDeInner(
+                OMDeInner::<OMD>(
                     Cow::Borrowed(cdbase.as_ref().map_or(&self.0, |e| &*e.0)),
                     PhantomData,
                 )
@@ -1114,7 +1111,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
 
         let mut variables = if let Some(variables) = variables {
             Some(
-                OMVarSeq(cdbase.as_ref().map_or(&self.0, |e| &*e.0), PhantomData)
+                OMVarSeq::<OMD>(cdbase.as_ref().map_or(&self.0, |e| &*e.0), PhantomData)
                     .deserialize(serde::__private::de::ContentDeserializer::new(variables))?,
             )
         } else {
@@ -1136,7 +1133,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
                     ))?);
                 }
                 AllFields::variables => {
-                    variables = Some(map.next_value_seed(OMVarSeq(
+                    variables = Some(map.next_value_seed(OMVarSeq::<OMD>(
                         cdbase.as_ref().map_or(&self.0, |e| &*e.0),
                         PhantomData,
                     ))?);
@@ -1160,9 +1157,9 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         };
         OMD::from_openmath(
             OM::OMBIND {
-                binder: binder.0.map_right(Box::new),
+                binder: binder.0,
                 variables,
-                object: object.0.map_right(Box::new),
+                object: object.0,
                 attrs,
             },
             cdbase.as_deref().unwrap_or(&self.0),
@@ -1192,10 +1189,10 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
             }
         }
         if let Some(foreign) = foreign {
-            return Ok(Either::Right(crate::OMMaybeForeign::Foreign {
+            return Ok(crate::OMMaybeForeign::Foreign {
                 encoding: encoding.map(|e| e.0),
                 value: foreign.0,
-            }));
+            });
         }
         Err(A::Error::custom("Missing value for OMFOREIGN"))
     }
@@ -1207,7 +1204,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         mut seq: A,
         kind: OMKind,
         attrs: Vec<Attr<'de, OMD>>,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
     {
@@ -1276,7 +1273,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         state: FieldState<'de>,
         map: A,
         attrs: Vec<Attr<'de, OMD>>,
-    ) -> Result<Either<OMD, OM<'de, OMD>>, A::Error>
+    ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
     {
@@ -1568,7 +1565,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
 impl<'de, OMD: OMDeserializable<'de> + 'de> serde::de::Visitor<'de>
     for OMVisitor<'de, '_, OMD, false>
 {
-    type Value = Either<OMD, OM<'de, OMD>>;
+    type Value = OMD::Ret;
     #[inline]
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("struct OMObject")
@@ -1615,8 +1612,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de> serde::de::Visitor<'de>
             return Self::visit_seq_omforeign(seq);
         }
         self.seq_om(seq, kind, Vec::new())
-            .map(|e| e.map_right(crate::OMMaybeForeign::OM))
-        //.map(|e| e.map_right(OMForeign::OM))
+            .map(crate::OMMaybeForeign::OM)
     }
 
     fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
@@ -1661,10 +1657,9 @@ impl<'de, OMD: OMDeserializable<'de> + 'de> serde::de::Visitor<'de>
                 state.foreign,
                 map,
             );
-            //.map(Either::Right);
         }
         self.om_map(kind, state, map, Vec::new())
-            .map(|e| e.map_right(crate::OMMaybeForeign::OM))
+            .map(crate::OMMaybeForeign::OM)
     }
 }
 
@@ -1741,7 +1736,7 @@ impl<'de, OMD> serde::de::DeserializeSeed<'de> for OMSeq<'de, '_, OMD>
 where
     OMD: OMDeserializable<'de> + 'de,
 {
-    type Value = Vec<Either<OMD, OM<'de, OMD>>>;
+    type Value = Vec<OMD::Ret>;
     #[inline]
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
@@ -1754,7 +1749,7 @@ impl<'de, OMD> serde::de::Visitor<'de> for OMSeq<'de, '_, OMD>
 where
     OMD: OMDeserializable<'de> + 'de,
 {
-    type Value = Vec<Either<OMD, OM<'de, OMD>>>;
+    type Value = Vec<OMD::Ret>;
     #[inline]
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("an optional argument list")
@@ -1779,7 +1774,9 @@ where
         A: serde::de::SeqAccess<'de>,
     {
         let mut vec = Vec::new();
-        while let Some(e) = seq.next_element_seed(OMDeInner(Cow::Borrowed(self.0), PhantomData))? {
+        while let Some(e) =
+            seq.next_element_seed(OMDeInner::<OMD>(Cow::Borrowed(self.0), PhantomData))?
+        {
             vec.push(e.0);
         }
         Ok(vec)
@@ -1832,7 +1829,7 @@ where
         A: serde::de::SeqAccess<'de>,
     {
         let mut vec = Vec::new();
-        while let Some(e) = seq.next_element_seed(OMDeForeign(self.0, PhantomData))? {
+        while let Some(e) = seq.next_element_seed(OMDeForeign::<OMD>(self.0, PhantomData))? {
             vec.push(e);
         }
         Ok(vec)
@@ -1884,7 +1881,7 @@ impl<'de, OMD> serde::de::Visitor<'de> for OMWithAttrs<'de, '_, OMD>
 where
     OMD: OMDeserializable<'de> + 'de,
 {
-    type Value = Either<OMD, OM<'de, OMD>>;
+    type Value = OMD::Ret;
 
     #[inline]
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -1951,10 +1948,10 @@ where
         else {
             return Err(A::Error::custom("missing OMS in OMATP"));
         };
-        let Some(value) = seq.next_element_seed(OMDeForeign(self.0, PhantomData))? else {
+        let Some(value) = seq.next_element_seed(OMDeForeign::<OMD>(self.0, PhantomData))? else {
             return Err(A::Error::custom("missing Value in OMATP"));
         };
-        Ok(Attr {
+        Ok(Attr::<OMD> {
             cdbase: cdbase.map(|e| e.0),
             cd: cd.0,
             name: name.0,
@@ -1993,7 +1990,7 @@ where
     where
         A: serde::de::SeqAccess<'de>,
     {
-        while let Some(v) = seq.next_element_seed(OMAttrV(self.0, PhantomData))? {
+        while let Some(v) = seq.next_element_seed(OMAttrV::<OMD>(self.0, PhantomData))? {
             self.1.push(v);
         }
         Ok(())
@@ -2032,7 +2029,7 @@ where
     {
         let mut ret = Vec::new();
         let mut att = Vec::new();
-        while let Some(v) = seq.next_element_seed(OMVarA(self.0, &mut att))? {
+        while let Some(v) = seq.next_element_seed(OMVarA::<OMD>(self.0, &mut att))? {
             ret.push((v, std::mem::take(&mut att)));
         }
         Ok(ret)
@@ -2139,11 +2136,11 @@ where
         };
         let cdbase = cdbase.unwrap_or(self.0);
 
-        let Some(()) = seq.next_element_seed(OMAttrSeq(cdbase, self.1))? else {
+        let Some(()) = seq.next_element_seed(OMAttrSeq::<OMD>(cdbase, self.1))? else {
             return Err(A::Error::custom("missing attributions in OMATTR"));
         };
 
-        let Some(var) = seq.next_element_seed(OMVarA(cdbase, self.1))? else {
+        let Some(var) = seq.next_element_seed(OMVarA::<OMD>(cdbase, self.1))? else {
             return Err(A::Error::custom("missing object in OMATTR"));
         };
         Ok(var)
@@ -2243,7 +2240,7 @@ where
         use serde::de::Error;
 
         let mut had_attrs = if let Some(attributes) = attributes {
-            OMAttrSeq(cdbase.as_ref().map_or(self.0, |e| &*e.0), self.1)
+            OMAttrSeq::<OMD>(cdbase.as_ref().map_or(self.0, |e| &*e.0), self.1)
                 .deserialize(serde::__private::de::ContentDeserializer::new(attributes))?;
             true
         } else {
@@ -2254,15 +2251,17 @@ where
             match key {
                 AllFields::cdbase => cdbase = Some(map.next_value()?),
                 AllFields::attributes => {
-                    map.next_value_seed(OMAttrSeq(
+                    map.next_value_seed(OMAttrSeq::<OMD>(
                         cdbase.as_ref().map_or(self.0, |e| &*e.0),
                         self.1,
                     ))?;
                     had_attrs = true;
                 }
                 AllFields::object if had_attrs => {
-                    let r = map
-                        .next_value_seed(OMVarA(cdbase.as_ref().map_or(self.0, |e| &*e.0), self.1));
+                    let r = map.next_value_seed(OMVarA::<OMD>(
+                        cdbase.as_ref().map_or(self.0, |e| &*e.0),
+                        self.1,
+                    ));
                     return r;
                 }
                 AllFields::object => object = Some(map.next_value()?),

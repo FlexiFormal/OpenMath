@@ -9,12 +9,11 @@ pub(crate) mod serde_impl;
 pub(crate) mod xml;
 use std::borrow::Cow;
 
-use crate::{OMKind, OMMaybeForeign, either::Either};
-use either::Either::Left;
+use crate::{OMKind, OMMaybeForeign};
 #[cfg(feature = "serde")]
 pub use serde_impl::OMFromSerde;
 
-pub type OMAttr<'o, I> = crate::Attr<'o, Either<I, crate::OMMaybeForeign<'o, OM<'o, I>>>>;
+pub type OMAttr<'o, I> = crate::Attr<'o, crate::OMMaybeForeign<'o, I>>;
 
 #[allow(rustdoc::redundant_explicit_links)]
 /**  Trait for types that can be deserialized from OpenMath objects.
@@ -58,55 +57,68 @@ to an `i128` directly; like so:
 ```rust
 # #[cfg(feature="serde")]
 # {
-# use std::borrow::Cow;
-use openmath::de::{OMDeserializable, OMFromSerde, OM};
-use openmath::either::Either;
+use either::Either;
+use openmath::de::{OM, OMDeserializable, OMFromSerde};
 
 #[derive(Copy, Clone, Debug)]
 struct SimplifiedInt(i128);
+impl<'d> TryFrom<Either<Self, OM<'d, Box<Self>>>> for SimplifiedInt {
+    type Error = &'static str;
+    fn try_from(value: Either<Self, OM<'d, Box<Self>>>) -> Result<Self, Self::Error> {
+        if let Either::Left(v) = value {
+            Ok(v)
+        } else {
+            Err("nope")
+        }
+    }
+}
 impl<'d> OMDeserializable<'d> for SimplifiedInt {
-    type Err = String;
+    type Ret = Either<Self, OM<'d, Box<Self>>>;
+    type Err = &'static str;
     fn from_openmath(
-        om: OM<'d, Self>,
-        cdbase:&str
-    ) -> Result<Either<Self, OM<'d, Self>>, Self::Err>
+        om: OM<'d, Self::Ret>,
+        cdbase: &str,
+    ) -> Result<Either<Self, OM<'d, Box<Self>>>, Self::Err>
     where
         Self: Sized,
     {
         match om {
             // An integer
-            OM::OMI{int,..} => {
+            OM::OMI { int, .. } => {
                 // ...which fits in an i128
-                if let Some(i) = int.is_i128() {
-                    Ok(Either::Left(Self(i)))
-                } else {
-                    Err(format!("Invalid int value: {int}"))
-                }
+                int.is_i128()
+                    .map_or(Err("Invalid int value"), |i| Ok(Either::Left(Self(i))))
             }
             // Addition or multiplication
-            OM::OMS { cd, name, attrs } if
-                cd == "arith1" &&
-                (name == "plus" || name == "times") &&
-                cdbase == openmath::OPENMATH_BASE_URI => {
+            OM::OMS { cd, name, .. }
+                if cd == "arith1"
+                    && (name == "plus" || name == "times")
+                    && cdbase == openmath::OPENMATH_BASE_URI =>
+            {
                 // works, but without arguments, we can't do anything to it *yet*.
                 // => We send it back, so we can take care of it later, if it
                 // occurs as the head of an OMA expression
-                Ok(either::Right(OM::OMS { cd, name, attrs }))
+                Ok(either::Right(OM::OMS {
+                    cd,
+                    name,
+                    attrs: Vec::new(),
+                }))
             }
             // some operator application to two arguments
             OM::OMA {
                 // still an open math expression:
                 applicant: either::Right(op),
                 mut arguments,
-                attrs
+                ..
             } if arguments.iter().all(Either::is_left)
                 && arguments.len() == 2
-                && cdbase == openmath::OPENMATH_BASE_URI => {
+                && cdbase == openmath::OPENMATH_BASE_URI =>
+            {
                 // An OMA only ends up here, after both the head and all arguments
                 // were fed into this method.
                 // Since "plus" and "times" are the only values for
                 // which we return `either::Right`, we know the following matches:
-                let is_times = match *op {
+                let is_times = match op {
                     OM::OMS { name, .. } => name == "times",
                     _ => unreachable!(),
                 };
@@ -124,7 +136,7 @@ impl<'d> OMDeserializable<'d> for SimplifiedInt {
                 Ok(Either::Left(Self(value)))
             }
             // everything else is illegal
-            o => Err(format!("Not an arithmetic expression: {o:?}")),
+            _ => Err("Not an arithmetic expression"),
         }
     }
 }
@@ -146,18 +158,18 @@ let s = r#"{
 let r = serde_json::from_str::<'_, OMFromSerde<SimplifiedInt>>(s)
     .expect("valid json, openmath, and arithmetic expression");
 assert_eq!(r.into_inner().0, 4);
-# #[cfg(feature="xml")]
+# #[cfg(feature = "xml")]
 # {
-// If the xml feature is active:
-let s = r#"
+    // If the xml feature is active:
+    let s = r#"
 <OMA cdbase="http://www.openmath.org/cd">
   <OMS cd="arith1" name="plus"/>
   <OMI>2</OMI>
   <OMI>2</OMI>
 </OMA>"#;
-let r = SimplifiedInt::from_openmath_xml(s)
-    .expect("valid xml, openmath, and arithmetic expression");
-assert_eq!(r.0, 4);
+    let r = SimplifiedInt::from_openmath_xml(s)
+        .expect("valid xml, openmath, and arithmetic expression");
+    assert_eq!(r.0, 4);
 # }
 # }
 ```
@@ -165,6 +177,13 @@ assert_eq!(r.0, 4);
 [^1]: <https://openmath.org/standard/om20-2019-07-01/omstd20.html#sec_json-the-json-encoding>
 */
 pub trait OMDeserializable<'de>: std::fmt::Debug {
+    /// The type returned by [from_openmath](OMDeserializable::from_openmath);
+    /// Can be `Self`, but can also be something more complex so that [OM]-values can be
+    /// "deferred" until enough information is there to construct a `Self`; See
+    /// above for an example.
+    type Ret: TryInto<Self, Error: std::fmt::Debug>
+    where
+        Self: Sized;
     /// The type of errors that can occur during deserialization.
     type Err: std::fmt::Display;
 
@@ -182,10 +201,7 @@ pub trait OMDeserializable<'de>: std::fmt::Debug {
     /// # Examples
     /// See [trait documentation](OMDeserializable)
     #[allow(clippy::type_complexity)]
-    fn from_openmath(
-        om: OM<'de, Self>,
-        cdbase: &str,
-    ) -> Result<Either<Self, OM<'de, Self>>, Self::Err>
+    fn from_openmath(om: OM<'de, Self::Ret>, cdbase: &str) -> Result<Self::Ret, Self::Err>
     where
         Self: Sized;
 
@@ -242,8 +258,7 @@ pub trait OMDeserializableOwned: for<'d> OMDeserializable<'d> {
 impl<O> OMDeserializableOwned for O where O: for<'de> OMDeserializable<'de> {}
 
 /// Wrapper to deserialize an OMOBJ
-pub struct OMObject<'de, O: OMDeserializable<'de> + 'de>(O, std::marker::PhantomData<&'de ()>);
-
+pub struct OMObject<'de, O: OMDeserializable<'de>>(O, std::marker::PhantomData<&'de ()>);
 impl<'de, O: OMDeserializable<'de>> OMObject<'de, O> {
     #[inline]
     pub fn into_inner(self) -> O {
@@ -257,34 +272,56 @@ impl<'de, O: OMDeserializable<'de>> OMObject<'de, O> {
 
     # Examples
     ```
-    use openmath::de::{OMDeserializable, OM,OMObject};
-    use openmath::either::Either;
-    #[derive(Debug)]
-    struct Meh;
-    impl OMDeserializable<'static> for Meh {
+    use openmath::de::{OMDeserializable, OM, OMObject};
+    #[derive(Copy, Clone, Debug)]
+    struct Oma;
+    enum ArgOrOMA {
+        Oms,
+        Omi,
+        Oma,
+    }
+    impl TryFrom<ArgOrOMA> for Oma {
+        type Error = &'static str;
+        fn try_from(value: ArgOrOMA) -> Result<Self, Self::Error> {
+            if matches!(value, ArgOrOMA::Oma) {
+                Ok(Self)
+            } else {
+                Err("nope")
+            }
+        }
+    }
+    impl<'d> OMDeserializable<'d> for Oma {
+        type Ret = ArgOrOMA;
         type Err = &'static str;
-        fn from_openmath(
-            om: OM<'static, Self>,
-            _cdbase: &str,
-        ) -> Result<Either<Self, OM<'static, Self>>, Self::Err>
+        fn from_openmath(om: OM<'d, ArgOrOMA>, _cdbase: &str) -> Result<Self::Ret, Self::Err>
         where
             Self: Sized,
         {
             match om {
-                OM::OMA { .. } => Ok(Either::Left(Self)),
-                o => Ok(Either::Right(o)),
+                OM::OMA {
+                    applicant: ArgOrOMA::Oms,
+                    arguments,
+                    ..
+                } if arguments.len() == 2
+                    && arguments.iter().all(|a| matches!(a, ArgOrOMA::Omi)) =>
+                {
+                    Ok(ArgOrOMA::Oma)
+                }
+                OM::OMS { .. } => Ok(ArgOrOMA::Oms),
+                OM::OMI { .. } => Ok(ArgOrOMA::Omi),
+                _ => Err("nope"),
             }
         }
     }
-    let s = r#"
-    <OMOBJ cdbase="http://www.openmath.org/cd">
+
+    let s = r#"<OMOBJ cdbase="http://www.openmath.org/cd">
       <OMA>
         <OMS cd="arith1" name="plus"/>
         <OMI>2</OMI>
         <OMI>2</OMI>
       </OMA>
     </OMOBJ>"#;
-    OMObject::<Meh>::from_openmath_xml(s).expect("is valid");
+    OMObject::<Oma>::from_openmath_xml(s).expect("is valid");
     ```
     */
     #[cfg(feature = "xml")]
@@ -312,7 +349,7 @@ impl<'de, O: OMDeserializable<'de>> OMObject<'de, O> {
 /// Also, empty Vecs are cheap.
 #[derive(Debug, Clone)]
 #[repr(u8)]
-pub enum OM<'de, I: OMDeserializable<'de>> {
+pub enum OM<'de, I> {
     /** <div class="openmath">
     Integers in the mathematical sense, with no predefined range.
     They are “infinite precision” integers (also called “bignums” in computer algebra).
@@ -389,8 +426,8 @@ pub enum OM<'de, I: OMDeserializable<'de>> {
     We call $A_1$ the function and $A_2$ to $A_n$ the arguments.
     </div> */
     OMA {
-        applicant: Either<I, Box<Self>>,
-        arguments: Vec<Either<I, Self>>,
+        applicant: I,
+        arguments: Vec<I>,
         attrs: Vec<OMAttr<'de, I>>,
     } = OMKind::OMA as _,
 
@@ -402,9 +439,9 @@ pub enum OM<'de, I: OMDeserializable<'de>> {
     $C$ is called the body of the binding object above.
     </div> */
     OMBIND {
-        binder: Either<I, Box<Self>>,
+        binder: I,
         variables: Vec<(Cow<'de, str>, Vec<OMAttr<'de, I>>)>,
-        object: Either<I, Box<Self>>,
+        object: I,
         attrs: Vec<OMAttr<'de, I>>,
     } = OMKind::OMBIND as _,
 
@@ -416,19 +453,20 @@ pub enum OM<'de, I: OMDeserializable<'de>> {
         cdbase: Option<Cow<'de, str>>,
         cd: Cow<'de, str>,
         name: Cow<'de, str>,
-        arguments: Vec<Either<I, OMMaybeForeign<'de, Self>>>,
+        arguments: Vec<OMMaybeForeign<'de, I>>,
         attrs: Vec<OMAttr<'de, I>>,
     } = OMKind::OME as _,
 }
 
 impl<'d> OMDeserializable<'d> for crate::Int<'d> {
+    type Ret = Self;
     type Err = &'static str;
-    fn from_openmath(om: OM<'d, Self>, _: &str) -> Result<Either<Self, OM<'d, Self>>, Self::Err>
+    fn from_openmath(om: OM<'d, Self>, _: &str) -> Result<Self, Self::Err>
     where
         Self: Sized,
     {
         if let OM::OMI { int, .. } = om {
-            Ok(Left(int))
+            Ok(int)
         } else {
             Err("Not an integer")
         }
@@ -436,14 +474,15 @@ impl<'d> OMDeserializable<'d> for crate::Int<'d> {
 }
 
 impl<'d> OMDeserializable<'d> for f32 {
+    type Ret = Self;
     type Err = &'static str;
     #[allow(clippy::cast_possible_truncation)]
-    fn from_openmath(om: OM<'d, Self>, _: &str) -> Result<Either<Self, OM<'d, Self>>, Self::Err>
+    fn from_openmath(om: OM<'d, Self>, _: &str) -> Result<Self, Self::Err>
     where
         Self: Sized,
     {
         if let OM::OMF { float, .. } = om {
-            Ok(Left(float as _))
+            Ok(float as _)
         } else {
             Err("Not a float")
         }
@@ -451,13 +490,14 @@ impl<'d> OMDeserializable<'d> for f32 {
 }
 
 impl<'d> OMDeserializable<'d> for f64 {
+    type Ret = Self;
     type Err = &'static str;
-    fn from_openmath(om: OM<'d, Self>, _: &str) -> Result<Either<Self, OM<'d, Self>>, Self::Err>
+    fn from_openmath(om: OM<'d, Self>, _: &str) -> Result<Self, Self::Err>
     where
         Self: Sized,
     {
         if let OM::OMF { float, .. } = om {
-            Ok(Left(float))
+            Ok(float)
         } else {
             Err("Not a float")
         }
@@ -465,13 +505,14 @@ impl<'d> OMDeserializable<'d> for f64 {
 }
 
 impl<'d> OMDeserializable<'d> for Cow<'d, str> {
+    type Ret = Self;
     type Err = &'static str;
-    fn from_openmath(om: OM<'d, Self>, _: &str) -> Result<Either<Self, OM<'d, Self>>, Self::Err>
+    fn from_openmath(om: OM<'d, Self>, _: &str) -> Result<Self, Self::Err>
     where
         Self: Sized,
     {
         if let OM::OMSTR { string, .. } = om {
-            Ok(Left(string))
+            Ok(string)
         } else {
             Err("Not an OMSTR")
         }
@@ -479,13 +520,14 @@ impl<'d> OMDeserializable<'d> for Cow<'d, str> {
 }
 
 impl<'d> OMDeserializable<'d> for String {
+    type Ret = Self;
     type Err = &'static str;
-    fn from_openmath(om: OM<'d, Self>, _: &str) -> Result<Either<Self, OM<'d, Self>>, Self::Err>
+    fn from_openmath(om: OM<'d, Self>, _: &str) -> Result<Self, Self::Err>
     where
         Self: Sized,
     {
         if let OM::OMSTR { string, .. } = om {
-            Ok(Left(string.into_owned()))
+            Ok(string.into_owned())
         } else {
             Err("Not an OMSTR")
         }
@@ -493,26 +535,28 @@ impl<'d> OMDeserializable<'d> for String {
 }
 
 impl<'d> OMDeserializable<'d> for Cow<'d, [u8]> {
+    type Ret = Self;
     type Err = &'static str;
-    fn from_openmath(om: OM<'d, Self>, _: &str) -> Result<Either<Self, OM<'d, Self>>, Self::Err>
+    fn from_openmath(om: OM<'d, Self>, _: &str) -> Result<Self, Self::Err>
     where
         Self: Sized,
     {
         if let OM::OMB { bytes, .. } = om {
-            Ok(Left(bytes))
+            Ok(bytes)
         } else {
             Err("Not an OMB")
         }
     }
 }
 impl<'d> OMDeserializable<'d> for Vec<u8> {
+    type Ret = Self;
     type Err = &'static str;
-    fn from_openmath(om: OM<'d, Self>, _: &str) -> Result<Either<Self, OM<'d, Self>>, Self::Err>
+    fn from_openmath(om: OM<'d, Self>, _: &str) -> Result<Self, Self::Err>
     where
         Self: Sized,
     {
         if let OM::OMB { bytes, .. } = om {
-            Ok(Left(bytes.into_owned()))
+            Ok(bytes.into_owned())
         } else {
             Err("Not an OMB")
         }
@@ -524,17 +568,18 @@ macro_rules! impl_int_deserializable {
     ($($t:ty=$err:literal),*) => {
         $(
             impl<'d> OMDeserializable<'d> for $t {
+                type Ret = Self;
                 type Err = &'static str;
                 fn from_openmath(
                     om: OM<'d, Self>,
                     _: &str
-                ) -> Result<Either<Self, OM<'d, Self>>, Self::Err>
+                ) -> Result<Self, Self::Err>
                 where
                     Self: Sized,
                 {
                     if let OM::OMI{int,..} = om {
                         int.is_i128().map_or(Err($err), |i| {
-                            i.try_into().map(Left).map_err(|_| $err)
+                            i.try_into().map_err(|_| $err)
                         })
                     } else {
                         Err("Not an OMI")
@@ -556,87 +601,18 @@ impl_int_deserializable! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Int;
-
-    // Test types for deserialization
-    #[derive(Debug, PartialEq, Clone)]
-    struct TestInt(i64);
-
-    impl<'de> OMDeserializable<'de> for TestInt {
-        type Err = String;
-
-        fn from_openmath(
-            om: OM<'de, Self>,
-            _: &str,
-        ) -> Result<Either<Self, OM<'de, Self>>, Self::Err> {
-            match om {
-                OM::OMI { int, attrs } => {
-                    if let Some(i) = int.is_i128() {
-                        if i >= i64::MIN.into() && i <= i64::MAX.into() {
-                            #[allow(clippy::cast_possible_truncation)]
-                            Ok(Either::Left(Self(i as i64)))
-                        } else {
-                            // Return the original value instead of error for too large integers
-                            Ok(Either::Right(OM::OMI { int, attrs }))
-                        }
-                    } else {
-                        // Big integer - can't fit in i64
-                        Ok(Either::Right(OM::OMI { int, attrs }))
-                    }
-                }
-                other => Ok(Either::Right(other)),
-            }
-        }
-    }
-
-    #[derive(Debug, PartialEq, Clone)]
-    struct TestFloat(f64);
-
-    impl<'de> OMDeserializable<'de> for TestFloat {
-        type Err = String;
-
-        fn from_openmath(
-            om: OM<'de, Self>,
-            _: &str,
-        ) -> Result<Either<Self, OM<'de, Self>>, Self::Err> {
-            match om {
-                OM::OMF { float, .. } if float.is_finite() => Ok(Either::Left(Self(float))),
-                OM::OMF { float, .. } => Err(format!("Non-finite float: {float}")),
-                other => Ok(Either::Right(other)),
-            }
-        }
-    }
-
-    #[derive(Debug, PartialEq, Clone)]
-    struct TestString(String);
-
-    impl<'de> OMDeserializable<'de> for TestString {
-        type Err = String;
-
-        fn from_openmath(
-            om: OM<'de, Self>,
-            _: &str,
-        ) -> Result<Either<Self, OM<'de, Self>>, Self::Err> {
-            match om {
-                OM::OMSTR { string, .. } => Ok(Either::Left(Self(string.to_string()))),
-                other => Ok(Either::Right(other)),
-            }
-        }
-    }
 
     #[derive(Debug, PartialEq, Clone)]
     struct TestVariable(String);
 
     impl<'de> OMDeserializable<'de> for TestVariable {
+        type Ret = Self;
         type Err = String;
 
-        fn from_openmath(
-            om: OM<'de, Self>,
-            _: &str,
-        ) -> Result<Either<Self, OM<'de, Self>>, Self::Err> {
+        fn from_openmath(om: OM<'de, Self>, _: &str) -> Result<Self, Self::Err> {
             match om {
-                OM::OMV { name, .. } => Ok(Either::Left(Self(name.to_string()))),
-                other => Ok(Either::Right(other)),
+                OM::OMV { name, .. } => Ok(Self(name.to_string())),
+                _ => Err("wrong".to_string()),
             }
         }
     }
@@ -649,243 +625,65 @@ mod tests {
     }
 
     impl<'de> OMDeserializable<'de> for TestSymbol {
-        type Err = String;
+        type Ret = Self;
+        type Err = &'static str;
 
-        fn from_openmath(
-            om: OM<'de, Self>,
-            cdbase: &str,
-        ) -> Result<Either<Self, OM<'de, Self>>, Self::Err> {
+        fn from_openmath(om: OM<'de, Self>, cdbase: &str) -> Result<Self, Self::Err> {
             match om {
-                OM::OMS { cd, name, .. } => Ok(Either::Left(Self {
+                OM::OMS { cd, name, .. } => Ok(Self {
                     cdbase: cdbase.to_string(),
                     cd: cd.to_string(),
                     name: name.to_string(),
-                })),
-                other => Ok(Either::Right(other)),
+                }),
+                _ => Err("nope"),
             }
         }
     }
 
-    // Test for owned deserialization
-    #[derive(Debug, PartialEq, Clone)]
-    struct OwnedTestString(String);
-
-    impl<'d> OMDeserializable<'d> for OwnedTestString {
-        type Err = String;
-
-        fn from_openmath(
-            om: OM<'d, Self>,
-            _: &str,
-        ) -> Result<Either<Self, OM<'d, Self>>, Self::Err> {
+    #[derive(Copy, Clone, Debug)]
+    struct Oma;
+    enum ArgOrOMA {
+        Oms,
+        Omi,
+        Oma,
+    }
+    impl TryFrom<ArgOrOMA> for Oma {
+        type Error = &'static str;
+        fn try_from(value: ArgOrOMA) -> Result<Self, Self::Error> {
+            if matches!(value, ArgOrOMA::Oma) {
+                Ok(Self)
+            } else {
+                Err("nope")
+            }
+        }
+    }
+    impl<'d> OMDeserializable<'d> for Oma {
+        type Ret = ArgOrOMA;
+        type Err = &'static str;
+        fn from_openmath(om: OM<'d, ArgOrOMA>, _cdbase: &str) -> Result<Self::Ret, Self::Err>
+        where
+            Self: Sized,
+        {
             match om {
-                OM::OMSTR { string, .. } => Ok(Either::Left(Self(string.into_owned()))),
-                other => Ok(Either::Right(other)),
-            }
-        }
-    }
-
-    #[test]
-    fn test_omi_deserialization_success() {
-        let int = Int::from(42);
-        let om = OM::OMI::<'static, TestInt> {
-            int,
-            attrs: Vec::new(),
-        };
-
-        let result =
-            TestInt::from_openmath(om, crate::OPENMATH_BASE_URI).expect("should be defined");
-        match result {
-            Either::Left(test_int) => assert_eq!(test_int, TestInt(42)),
-            Either::Right(_) => panic!("Expected successful deserialization"),
-        }
-    }
-
-    #[test]
-    fn test_omi_deserialization_too_large() {
-        let big_int = Int::new("123456789012345678901234567890").expect("should be defined");
-        let om: OM<TestInt> = OM::OMI {
-            int: big_int.clone(),
-            attrs: Vec::new(),
-        };
-
-        let result =
-            TestInt::from_openmath(om, crate::OPENMATH_BASE_URI).expect("should be defined");
-        match result {
-            Either::Left(_) => panic!("Expected deserialization to fail"),
-            Either::Right(OM::OMI {
-                int: returned_int, ..
-            }) => {
-                assert_eq!(returned_int.is_big(), big_int.is_big());
-            }
-            Either::Right(_) => panic!("Expected OMI to be returned"),
-        }
-    }
-
-    #[test]
-    fn test_omi_deserialization_i128_max() {
-        let int_val = Int::from(i128::MAX);
-        let om: OM<TestInt> = OM::OMI {
-            int: int_val.clone(),
-            attrs: Vec::new(),
-        };
-
-        let result =
-            TestInt::from_openmath(om, crate::OPENMATH_BASE_URI).expect("should be defined");
-        match result {
-            Either::Left(_) => panic!("Expected deserialization to fail for i128::MAX"),
-            Either::Right(OM::OMI {
-                int: returned_int, ..
-            }) => {
-                assert_eq!(returned_int.is_i128(), int_val.is_i128());
-            }
-            Either::Right(_) => panic!("Expected OMI to be returned"),
-        }
-    }
-
-    #[test]
-    #[allow(clippy::approx_constant)]
-    fn test_omf_deserialization_success() {
-        let om = OM::OMF::<'_, TestFloat> {
-            float: 3.14159,
-            attrs: Vec::new(),
-        };
-
-        let result =
-            TestFloat::from_openmath(om, crate::OPENMATH_BASE_URI).expect("should be defined");
-        match result {
-            Either::Left(test_float) => assert_eq!(test_float, TestFloat(3.14159)),
-            Either::Right(_) => panic!("Expected successful deserialization"),
-        }
-    }
-
-    #[test]
-    fn test_omf_deserialization_infinity() {
-        let om = OM::OMF::<'_, TestFloat> {
-            float: f64::INFINITY,
-            attrs: Vec::new(),
-        };
-
-        let result = TestFloat::from_openmath(om, crate::OPENMATH_BASE_URI);
-        match result {
-            Err(e) => assert!(e.contains("Non-finite")),
-            Ok(_) => panic!("Expected error for infinity"),
-        }
-    }
-
-    #[test]
-    fn test_omstr_deserialization() {
-        let om = OM::OMSTR::<'_, TestString> {
-            string: Cow::Borrowed("hello world"),
-            attrs: Vec::new(),
-        };
-
-        let result =
-            TestString::from_openmath(om, crate::OPENMATH_BASE_URI).expect("should be defined");
-        match result {
-            Either::Left(test_string) => {
-                assert_eq!(test_string, TestString("hello world".to_string()));
-            }
-            Either::Right(_) => panic!("Expected successful deserialization"),
-        }
-    }
-
-    #[test]
-    fn test_omv_deserialization() {
-        let om = OM::OMV::<TestVariable> {
-            name: Cow::Borrowed("x"),
-            attrs: Vec::new(),
-        };
-
-        let result =
-            TestVariable::from_openmath(om, crate::OPENMATH_BASE_URI).expect("should be defined");
-        match result {
-            Either::Left(test_var) => assert_eq!(test_var, TestVariable("x".to_string())),
-            Either::Right(_) => panic!("Expected successful deserialization"),
-        }
-    }
-
-    #[test]
-    fn test_oms_deserialization() {
-        let om: OM<TestSymbol> = OM::OMS {
-            cd: Cow::Borrowed("arith1"),
-            name: Cow::Borrowed("plus"),
-            attrs: Vec::new(),
-        };
-
-        let result =
-            TestSymbol::from_openmath(om, crate::OPENMATH_BASE_URI).expect("should be defined");
-        match result {
-            Either::Left(test_symbol) => assert_eq!(
-                test_symbol,
-                TestSymbol {
-                    cdbase: "http://www.openmath.org/cd".to_string(),
-                    cd: "arith1".to_string(),
-                    name: "plus".to_string(),
+                OM::OMA {
+                    applicant: ArgOrOMA::Oms,
+                    arguments,
+                    ..
+                } if arguments.len() == 2
+                    && arguments.iter().all(|a| matches!(a, ArgOrOMA::Omi)) =>
+                {
+                    Ok(ArgOrOMA::Oma)
                 }
-            ),
-            Either::Right(_) => panic!("Expected successful deserialization"),
-        }
-    }
-
-    #[test]
-    #[allow(clippy::approx_constant)]
-    #[allow(clippy::float_cmp)]
-    fn test_wrong_type_deserialization() {
-        // Try to deserialize a float as an integer
-        let om = OM::OMF::<'_, TestInt> {
-            float: 3.14,
-            attrs: Vec::new(),
-        };
-
-        let result =
-            TestInt::from_openmath(om, crate::OPENMATH_BASE_URI).expect("should be defined");
-        match result {
-            Either::Left(_) => panic!("Expected deserialization to fail"),
-            Either::Right(OM::OMF { float, .. }) => assert_eq!(float, 3.14f64),
-            Either::Right(_) => panic!("Expected OMF to be returned"),
-        }
-    }
-
-    #[test]
-    fn test_owned_deserialization() {
-        let om = OM::OMSTR::<'_, OwnedTestString> {
-            string: Cow::Owned("owned string".to_string()),
-            attrs: Vec::new(),
-        };
-
-        let result = <OwnedTestString as OMDeserializable<'static>>::from_openmath(
-            om,
-            crate::OPENMATH_BASE_URI,
-        )
-        .expect("should be defined");
-        match result {
-            Either::Left(owned_string) => {
-                assert_eq!(owned_string, OwnedTestString("owned string".to_string()));
+                OM::OMS { .. } => Ok(ArgOrOMA::Oms),
+                OM::OMI { .. } => Ok(ArgOrOMA::Omi),
+                _ => Err("nope"),
             }
-            Either::Right(_) => panic!("Expected successful deserialization"),
         }
     }
 
     #[cfg(feature = "serde")]
     #[test]
     fn test_oma_deserialization() {
-        #[derive(Copy, Clone, Debug)]
-        struct Oma;
-        impl<'d> OMDeserializable<'d> for Oma {
-            type Err = String;
-            fn from_openmath(
-                om: OM<'d, Self>,
-                _cdbase: &str,
-            ) -> Result<Either<Self, OM<'d, Self>>, Self::Err>
-            where
-                Self: Sized,
-            {
-                match om {
-                    OM::OMA { .. } => Ok(Either::Left(Self)),
-                    o => Ok(Either::Right(o)),
-                }
-            }
-        }
         let s = r#"{
             "cdbase":"http://www.openmath.org/cd",
             "kind": "OMA",
@@ -905,26 +703,108 @@ mod tests {
             .expect("valid json, openmath, and arithmetic expression");
     }
 
+    #[cfg(feature = "xml")]
+    #[test]
+    fn test_oma_deserialization_xml() {
+        let s = r#"<OMOBJ cdbase="http://www.openmath.org/cd">
+          <OMA>
+            <OMS cd="arith1" name="plus"/>
+            <OMI>2</OMI>
+            <OMI>2</OMI>
+          </OMA>
+        </OMOBJ>"#;
+        OMObject::<Oma>::from_openmath_xml(s).expect("is valid");
+    }
+
     #[cfg(feature = "serde")]
     #[test]
-    fn test_oma_deserialization_borrowed() {
+    fn fancy() {
+        use crate as openmath;
+        use either::Either;
+        use openmath::de::{OM, OMDeserializable, OMFromSerde};
+
         #[derive(Copy, Clone, Debug)]
-        struct Oma;
-        impl<'d> OMDeserializable<'d> for Oma {
-            type Err = String;
+        struct SimplifiedInt(i128);
+        impl<'d> TryFrom<Either<Self, OM<'d, Box<Self>>>> for SimplifiedInt {
+            type Error = &'static str;
+            fn try_from(value: Either<Self, OM<'d, Box<Self>>>) -> Result<Self, Self::Error> {
+                if let Either::Left(v) = value {
+                    Ok(v)
+                } else {
+                    Err("nope")
+                }
+            }
+        }
+        impl<'d> OMDeserializable<'d> for SimplifiedInt {
+            type Ret = Either<Self, OM<'d, Box<Self>>>;
+            type Err = &'static str;
             fn from_openmath(
-                om: OM<'d, Self>,
-                _cdbase: &str,
-            ) -> Result<Either<Self, OM<'d, Self>>, Self::Err>
+                om: OM<'d, Self::Ret>,
+                cdbase: &str,
+            ) -> Result<Either<Self, OM<'d, Box<Self>>>, Self::Err>
             where
                 Self: Sized,
             {
                 match om {
-                    OM::OMA { .. } => Ok(Either::Left(Self)),
-                    o => Ok(Either::Right(o)),
+                    // An integer
+                    OM::OMI { int, .. } => {
+                        // ...which fits in an i128
+                        int.is_i128()
+                            .map_or(Err("Invalid int value"), |i| Ok(Either::Left(Self(i))))
+                    }
+                    // Addition or multiplication
+                    OM::OMS { cd, name, .. }
+                        if cd == "arith1"
+                            && (name == "plus" || name == "times")
+                            && cdbase == openmath::OPENMATH_BASE_URI =>
+                    {
+                        // works, but without arguments, we can't do anything to it *yet*.
+                        // => We send it back, so we can take care of it later, if it
+                        // occurs as the head of an OMA expression
+                        Ok(either::Right(OM::OMS {
+                            cd,
+                            name,
+                            attrs: Vec::new(),
+                        }))
+                    }
+                    // some operator application to two arguments
+                    OM::OMA {
+                        // still an open math expression:
+                        applicant: either::Right(op),
+                        mut arguments,
+                        ..
+                    } if arguments.iter().all(Either::is_left)
+                        && arguments.len() == 2
+                        && cdbase == openmath::OPENMATH_BASE_URI =>
+                    {
+                        // An OMA only ends up here, after both the head and all arguments
+                        // were fed into this method.
+                        // Since "plus" and "times" are the only values for
+                        // which we return `either::Right`, we know the following matches:
+                        let is_times = match op {
+                            OM::OMS { name, .. } => name == "times",
+                            _ => unreachable!(),
+                        };
+                        let Some(Either::Left(arg2)) = arguments.pop() else {
+                            unreachable!()
+                        };
+                        let Some(Either::Left(arg1)) = arguments.pop() else {
+                            unreachable!()
+                        };
+                        let value = if is_times {
+                            arg1.0 * arg2.0
+                        } else {
+                            arg1.0 + arg2.0
+                        };
+                        Ok(Either::Left(Self(value)))
+                    }
+                    // everything else is illegal
+                    _ => Err("Not an arithmetic expression"),
                 }
             }
         }
+
+        // 2 + 2
         let s = r#"{
             "cdbase":"http://www.openmath.org/cd",
             "kind": "OMA",
@@ -938,7 +818,21 @@ mod tests {
                 { "kind":"OMI", "integer":2 }
             ]
         }"#;
-        serde_json::from_str::<'_, OMFromSerde<Oma>>(s)
+        let r = serde_json::from_str::<'_, OMFromSerde<SimplifiedInt>>(s)
             .expect("valid json, openmath, and arithmetic expression");
+        assert_eq!(r.into_inner().0, 4);
+        #[cfg(feature = "xml")]
+        {
+            // If the xml feature is active:
+            let s = r#"
+        <OMA cdbase="http://www.openmath.org/cd">
+          <OMS cd="arith1" name="plus"/>
+          <OMI>2</OMI>
+          <OMI>2</OMI>
+        </OMA>"#;
+            let r = SimplifiedInt::from_openmath_xml(s)
+                .expect("valid xml, openmath, and arithmetic expression");
+            assert_eq!(r.0, 4);
+        }
     }
 }

@@ -1,0 +1,35 @@
+on:
+  push:
+    branches: [main]
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: rustups
+        run: rustup update && rustup target add x86_64-unknown-linux-gnu && rustup target add wasm32-unknown-unknown && rustup toolchain install nightly-x86_64-unknown-linux-gnu && rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
+      - name: cargo
+        run: cargo install --force cargo-make && cargo install wasm-pack && cargo install wasm-bindgen-cli && cargo install --locked cargo-leptos
+      - name: openmath tests
+        run: cd openmath && cargo make all-tests
+      - name: doc
+        run: cd openmath && cargo make doc
+      - name: Upload openmath Docs
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: target/doc/openmath
+  deploy-docs:
+    needs: linux
+    permissions:
+      pages: write # to deploy to Pages
+      id-token: write # to verify the deployment originates from an appropriate source
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}/openmath
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
