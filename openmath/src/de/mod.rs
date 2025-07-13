@@ -457,6 +457,17 @@ pub enum OM<'de, I> {
         attrs: Vec<OMAttr<'de, I>>,
     } = OMKind::OME as _,
 }
+impl<I> OM<'_, I> {
+    pub fn kind(&self) -> crate::OMKind {
+        // SAFETY: Because `Self` is marked `repr(u8)`, its layout is a `repr(C)` `union`
+        // between `repr(C)` structs, each of which has the `u8` discriminant as its first
+        // field, so we can read the discriminant without offsetting the pointer.
+        unsafe {
+            let u = *<*const _>::from(self).cast::<u8>();
+            crate::OMKind::from_u8(u).unwrap_unchecked()
+        }
+    }
+}
 
 impl<'d> OMDeserializable<'d> for crate::Int<'d> {
     type Ret = Self;
