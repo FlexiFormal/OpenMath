@@ -38,11 +38,20 @@ macro_rules! omkinds {
             ),*
         }
         impl OMKind {
+            /// as static string
             #[must_use]
             pub const fn as_str(self) -> &'static str {
                 match self {$(
                     Self::$id => stringify!($id)
                 ),*}
+            }
+            /// convert from a byte
+            #[must_use]
+            pub const fn from_u8(u:u8) -> Option<Self> {
+                match u {
+                    $( $v => Some(Self::$id) ),*,
+                    _ => None
+                }
             }
         }
         impl std::fmt::Display for OMKind {
