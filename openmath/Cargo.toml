@@ -34,7 +34,6 @@ rustdoc-args = [
     "docsrs",
     "-Zunstable-options",
     "-Zrustdoc-scrape-examples",
-    "--all-features",
     "--generate-link-to-definition",
     "--html-in-header",
     "doc/katex-header.html",
