@@ -1,6 +1,6 @@
 [package]
 name = "openmath"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 
 authors = ["Dennis Müller <d.mueller@kwarc.info>"]
@@ -33,7 +33,6 @@ rustdoc-args = [
     "--cfg",
     "docsrs",
     "-Zunstable-options",
-    "-Zrustdoc-scrape-examples",
     "--generate-link-to-definition",
     "--html-in-header",
     "doc/katex-header.html",
