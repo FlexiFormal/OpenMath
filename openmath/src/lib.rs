@@ -20,14 +20,14 @@ pub use int::Int;
 use crate::ser::AsOMS;
 
 /// The base URI of official OᴘᴇɴMᴀᴛʜ dictionaries (`http://www.openmath.org/cd`)
-pub const OPENMATH_BASE_URI: &str = "http://www.openmath.org/cd";
+pub const CD_BASE: &str = "http://www.openmath.org/cd";
 
 /// XML namespace for OpenMath elements
-pub const XML_NAMESPACE: &str = "http://www.openmath.org/OpenMath";
+pub const XML_NS: &str = "http://www.openmath.org/OpenMath";
 
 macro_rules! omkinds {
     ($( $(#[$meta:meta])* $id:ident = $v:literal ),* $(,)?) => {
-        /// All OpenMath tags/kinds
+        /// All <span style="font-variant:small-caps;">OpenMath</span> tags/kinds
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         #[repr(u8)]
         #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
@@ -109,57 +109,57 @@ omkinds! {
     /// not explicit in these fields but whose values may be obtained by inspecting the Content
     /// Dictionary specified. These include the symbol definition, formal properties and examples
     /// and, optionally, a role which is a restriction on where the symbol may appear in an
-    /// OpenMath object. The possible roles are described in
+    /// <span style="font-variant:small-caps;">OpenMath</span> object. The possible roles are described in
     /// [Section 2.1.4](https://openmath.org/standard/om20-2019-07-01/omstd20.html#sec_roles).
     ///
     ///</div>
     OMS = 5,
 
     /** <div class="openmath">
-    If $A_1,...,A_n\;(n>0)$ are OpenMath objects, then
-    $\mathrm{application}(A_1,...,A_n)$ is an OpenMath application object.
+    If $A_1,...,A_n\;(n>0)$ are <span style="font-variant:small-caps;">OpenMath</span> objects, then
+    $\mathrm{application}(A_1,...,A_n)$ is an <span style="font-variant:small-caps;">OpenMath</span> application object.
     We call $A_1$ the function and $A_2$ to $A_n$ the arguments.
     </div> */
     OMA = 6,
 
     /** <div class="openmath">
-    If $B$ and $C$ are OpenMath objects, and $v_1,...,v_n\;(n\geq0)$
-    are OpenMath variables or attributed variables, then
-    $\mathrm{binding}(B,v_1,...,v_n,C)$ is an OpenMath binding object.
+    If $B$ and $C$ are <span style="font-variant:small-caps;">OpenMath</span> objects, and $v_1,...,v_n\;(n\geq0)$
+    are <span style="font-variant:small-caps;">OpenMath</span> variables or attributed variables, then
+    $\mathrm{binding}(B,v_1,...,v_n,C)$ is an <span style="font-variant:small-caps;">OpenMath</span> binding object.
     $B$ is called the binder, $v_1,...,v_n$ are called variable bindings, and
     $C$ is called the body of the binding object above.
     </div> */
     OMBIND = 7,
 
     /** <div class="openmath">
-    If $S$ is an OpenMath symbol and $A_1,...,A_n\;(n\geq0)$ are OpenMath objects or
-    derived OpenMath objects, then $\mathrm{error}(S,A_1,...,A_n)$ is an OpenMath error object.
+    If $S$ is an <span style="font-variant:small-caps;">OpenMath</span> symbol and $A_1,...,A_n\;(n\geq0)$ are <span style="font-variant:small-caps;">OpenMath</span> objects or
+    derived <span style="font-variant:small-caps;">OpenMath</span> objects, then $\mathrm{error}(S,A_1,...,A_n)$ is an <span style="font-variant:small-caps;">OpenMath</span> error object.
     </div> */
     OME = 8,
 
     /** <div class="openmath">
-    If $S_1,...,S_n$ are OpenMath symbols, and $A$ is an OpenMath object, and
-    $A_1,...,A_n\;(n>0)$ are OpenMath objects or derived OpenMath objects, then
-    $\mathrm{attribution}(A,S_1\;A_1,...,S_n\;A_n)$ is an OpenMath attribution object. We call
+    If $S_1,...,S_n$ are <span style="font-variant:small-caps;">OpenMath</span> symbols, and $A$ is an <span style="font-variant:small-caps;">OpenMath</span> object, and
+    $A_1,...,A_n\;(n>0)$ are <span style="font-variant:small-caps;">OpenMath</span> objects or derived <span style="font-variant:small-caps;">OpenMath</span> objects, then
+    $\mathrm{attribution}(A,S_1\;A_1,...,S_n\;A_n)$ is an <span style="font-variant:small-caps;">OpenMath</span> attribution object. We call
     $A$ the attributed object, the $S_i$ the keys, and the $A_i$ the attribute values.
     </div> */
     OMATTR = 9,
 
     /** <div class="openmath">
-    If $A$ is not an OpenMath object, then $\mathrm{foreign}(A)$ is an OpenMath foreign object.
-    An OpenMath foreign object may optionally have an encoding field which describes how its
+    If $A$ is not an <span style="font-variant:small-caps;">OpenMath</span> object, then $\mathrm{foreign}(A)$ is an <span style="font-variant:small-caps;">OpenMath</span> foreign object.
+    An <span style="font-variant:small-caps;">OpenMath</span> foreign object may optionally have an encoding field which describes how its
     contents should be interpreted.
     </div> */
     OMFOREIGN = 10,
 
     /** <div class="openmath">
-    OpenMath integers, symbols, variables, floating point numbers, character strings, bytearrays,
+    <span style="font-variant:small-caps;">OpenMath</span> integers, symbols, variables, floating point numbers, character strings, bytearrays,
     applications, binding, attributions, error, and foreign objects can also be encoded as an empty
     OMR element with an href attribute whose value is the value of a URI referencing an id attribute of an
-    OpenMath object of that type. The OpenMath element represented by this OMR reference is a copy of the
-    OpenMath element referenced href attribute. Note that this copy is structurally equal, but not
+    <span style="font-variant:small-caps;">OpenMath</span> object of that type. The <span style="font-variant:small-caps;">OpenMath</span> element represented by this OMR reference is a copy of the
+    <span style="font-variant:small-caps;">OpenMath</span> element referenced href attribute. Note that this copy is structurally equal, but not
     identical to the element referenced. These URI references will often be relative, in which case they
-    are resolved using the base URI of the document containing the OpenMath.
+    are resolved using the base URI of the document containing the <span style="font-variant:small-caps;">OpenMath</span>.
     </div> */
     OMR = 11,
 }
@@ -167,13 +167,12 @@ omkinds! {
 /// Enum representing all possible OᴘᴇɴMᴀᴛʜ objects.
 ///
 /// This enum encompasses the complete OᴘᴇɴMᴀᴛʜ object model, providing variants
-/// for each type of mathematical object that can be represented in OpenMath.
+/// for each type of mathematical object that can be represented in <span style="font-variant:small-caps;">OpenMath</span>.
 ///
-/// # Type Parameters
-/// - `'de`: Lifetime of the deserialized data
-/// - `I`: The type that implements [`OMDeserializable`] (your target type)
-/// - `Arr`: Type for byte arrays (default: <code>[Cow]<'b, [u8]></code>)
-/// - `Str`: Type for strings (default: `&'de str`)
+/// Note that we add `attributes` to each variant rather than having a separate
+/// [`OMATTR`](OMKind::OMATTR) case; that is to avoid having to deal with nested
+/// `OMATTR(OMATTR(OMATTR(...` terms or having to make the grammar significantly
+/// more complicated.
 ///
 ///<div class="openmath">
 /// OᴘᴇɴMᴀᴛʜ objects are built recursively as follows.
@@ -238,7 +237,7 @@ pub enum OpenMath<'om> {
     not explicit in these fields but whose values may be obtained by inspecting the Content
     Dictionary specified. These include the symbol definition, formal properties and examples
     and, optionally, a role which is a restriction on where the symbol may appear in an
-    OpenMath object. The possible roles are described in Section 2.1.4.
+    <span style="font-variant:small-caps;">OpenMath</span> object. The possible roles are described in Section 2.1.4.
     </div> */
     OMS {
         cd: Cow<'om, str>,
@@ -248,8 +247,8 @@ pub enum OpenMath<'om> {
     } = OMKind::OMS as _,
 
     /** <div class="openmath">
-    If $A_1,...,A_n\;(n>0)$ are OpenMath objects, then
-    $\mathrm{application}(A_1,...,A_n)$ is an OpenMath application object.
+    If $A_1,...,A_n\;(n>0)$ are <span style="font-variant:small-caps;">OpenMath</span> objects, then
+    $\mathrm{application}(A_1,...,A_n)$ is an <span style="font-variant:small-caps;">OpenMath</span> application object.
     We call $A_1$ the function and $A_2$ to $A_n$ the arguments.
     </div> */
     OMA {
@@ -259,8 +258,8 @@ pub enum OpenMath<'om> {
     } = OMKind::OMA as _,
 
     /** <div class="openmath">
-    If $S$ is an OpenMath symbol and $A_1,...,A_n\;(n\geq0)$ are OpenMath objects or
-    derived OpenMath objects, then $\mathrm{error}(S,A_1,...,A_n)$ is an OpenMath error object.
+    If $S$ is an <span style="font-variant:small-caps;">OpenMath</span> symbol and $A_1,...,A_n\;(n\geq0)$ are <span style="font-variant:small-caps;">OpenMath</span> objects or
+    derived <span style="font-variant:small-caps;">OpenMath</span> objects, then $\mathrm{error}(S,A_1,...,A_n)$ is an <span style="font-variant:small-caps;">OpenMath</span> error object.
     </div> */
     OME {
         cd: Cow<'om, str>,
@@ -271,9 +270,9 @@ pub enum OpenMath<'om> {
     } = OMKind::OME as _,
 
     /** <div class="openmath">
-    If $B$ and $C$ are OpenMath objects, and $v_1,...,v_n$\;(n\geq0)$
-    are OpenMath variables or attributed variables, then
-    $\mathrm{binding}(B,v_1,...,v_n,C)$ is an OpenMath binding object.
+    If $B$ and $C$ are <span style="font-variant:small-caps;">OpenMath</span> objects, and $v_1,...,v_n\;(n\geq0)$
+    are <span style="font-variant:small-caps;">OpenMath</span> variables or attributed variables, then
+    $\mathrm{binding}(B,v_1,...,v_n,C)$ is an <span style="font-variant:small-caps;">OpenMath</span> binding object.
     $B$ is called the binder, $v_1,...,v_n$ are called variable bindings, and
     $C$ is called the body of the binding object above.
     </div> */
@@ -288,8 +287,11 @@ pub enum OpenMath<'om> {
 /// A bound variable in an [`OMBIND`](OpenMath::OMBIND)
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BoundVariable<'om> {
-    name: Cow<'om, str>,
-    attributes: Vec<Attr<'om, OMMaybeForeign<'om, OpenMath<'om>>>>,
+    /// the name of the variable
+    pub name: Cow<'om, str>,
+    /// (optional) attributes of the variable;
+    /// this Vec being non-empty represents the case `OMATTR(...,OMV(name))`
+    pub attributes: Vec<Attr<'om, OMMaybeForeign<'om, OpenMath<'om>>>>,
 }
 impl ser::BindVar for &BoundVariable<'_> {
     #[inline]
@@ -304,7 +306,7 @@ impl ser::BindVar for &BoundVariable<'_> {
 
 /// An attribute in an [`OMATTR`](OMKind::OMATTR)
 ///
-/// Generic, so it can be reused in [OM]
+/// Generic over the attribute value, so it can be used in [OpenMath] and [OM]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Attr<'o, I> {
     pub cdbase: Option<Cow<'o, str>>,
@@ -331,7 +333,7 @@ where
 
 /// Either an [OpenMath Expression](OpenMath) or an [`OMFOREIGN`](OMKind::OMFOREIGN).
 ///
-/// Generic, so it can be reused in [OM]
+/// Generic over the non-OMFOREIGN-case, so it can be used in both [OpenMath] and [OM]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum OMMaybeForeign<'o, I> {
     // An OMExpr
@@ -347,7 +349,9 @@ pub enum OMMaybeForeign<'o, I> {
         value: Cow<'o, str>,
     },
 }
+
 impl<I: ser::OMSerializable> ser::OMOrForeign for &OMMaybeForeign<'_, I> {
+    /// converts this into an `Either`(crate::either::Either)
     fn om_or_foreign(
         self,
     ) -> crate::either::Either<

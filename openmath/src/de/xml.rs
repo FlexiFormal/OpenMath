@@ -474,7 +474,7 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
     where
         Self: Sized,
     {
-        let cdbase = crate::OPENMATH_BASE_URI;
+        let cdbase = crate::CD_BASE;
         loop {
             let now = self.now();
             let n = self.next()?;
@@ -502,7 +502,7 @@ pub(super) trait Readable<'s, O: super::OMDeserializable<'s>> {
     where
         Self: Sized,
     {
-        let cdbase = cdbase.unwrap_or(crate::OPENMATH_BASE_URI);
+        let cdbase = cdbase.unwrap_or(crate::CD_BASE);
         loop {
             if let ControlFlow::Break(b) = self.handle_next(cdbase, Vec::new())? {
                 return b.try_into().map_err(|_| XmlReadError::NotFullyConvertible);

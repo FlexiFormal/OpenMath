@@ -1,7 +1,7 @@
-//! # Serde Integration for OpenMath Deserialization
+//! # Serde Integration for <span style="font-variant:small-caps;">OpenMath</span> Deserialization
 //!
-//! This module provides serde integration for OpenMath deserialization, allowing
-//! OpenMath objects to be deserialized from any format supported by serde (JSON,
+//! This module provides serde integration for <span style="font-variant:small-caps;">OpenMath</span> deserialization, allowing
+//! <span style="font-variant:small-caps;">OpenMath</span> objects to be deserialized from any format supported by serde (JSON,
 //! XML, YAML, etc.).
 //!
 //! ## Usage
@@ -114,10 +114,10 @@ impl<'de, O: OMDeserializable<'de> + 'de> serde::Deserialize<'de> for super::OMO
     }
 }
 
-/// Wrapper type for deserializing OpenMath objects via serde.
+/// Wrapper type for deserializing <span style="font-variant:small-caps;">OpenMath</span> objects via serde.
 ///
 /// This type wraps any `OMDeserializable` type and provides a `serde::Deserialize`
-/// implementation that can parse OpenMath objects from serde-compatible formats.
+/// implementation that can parse <span style="font-variant:small-caps;">OpenMath</span> objects from serde-compatible formats.
 ///
 /// # Type Parameters
 /// - `'de`: Lifetime of the deserialized data
@@ -199,7 +199,7 @@ where
     where
         D: serde::Deserializer<'de>,
     {
-        OMDeInner(Cow::Borrowed(crate::OPENMATH_BASE_URI), PhantomData).deserialize(deserializer)
+        OMDeInner(Cow::Borrowed(crate::CD_BASE), PhantomData).deserialize(deserializer)
     }
 }
 

@@ -1,60 +1,5 @@
-/*! # OpenMath Serialization
-
-This module provides traits and implementations for serializing Rust types
-as OpenMath. The core trait [`OMSerializable`] allows any type to
-define how it should be represented as an OpenMath object.
-Serialization uses a [serde](https://docs.rs/serde)-style architecture to avoid allocations
-and cloning wherever possible.
-
-### Built-in Serializers
-- [openmath_display()](OMSerializable::openmath_display) implements
-  [Debug](std::fmt::Debug) and [Display](std::fmt::Display) using the OpenMath XML tags
-  as prefix (see below for an example)
-- **Serde-based**: Serialize to any serde-compatible format by using <code>self.[openmath_serde()](OMSerializable::openmath_serde())</code>
-  instead of `self` (requires the `serde` feature).
-  The implementation follows the official OpenMath JSON encoding[^1], so using
-  [`serde_json`](https://docs.rs/serde_json) allows for serializing to specification-compliant
-  JSON.
-
-## Examples
-
-```rust
-use openmath::{OMSerializable, ser::{OMSerializer,Uri,AsOMS}};
-pub struct Point {
-    x: f64,
-    y: f64,
-}
-impl Point {
-    const URI: Uri<'static> = Uri {
-        cdbase: Some("http://example.org"),
-        cd: "geometry1",
-        name: "point",
-    };
-}
-impl OMSerializable for Point {
-    fn as_openmath<'s,S: OMSerializer<'s>>(
-        &self,
-        serializer: S,
-    ) -> Result<S::Ok, S::Err> {
-        // Represent as OMA: point(x, y)
-        serializer.oma(Self::URI.as_oms(), [self.x, self.y].iter())
-    }
-}
-fn test() {
-    let point = Point { x:1.4, y:7.8 };
-    assert_eq!(
-        point.openmath_display().to_string(),
-        "OMA(OMS(http://example.org/geometry1#point),OMF(1.4),OMF(7.8))"
-    )
-}
-#[cfg(feature="serde")]
-fn serde_test() {
-    let point = Point { x:1.4, y:7.8 };
-    let json = serde_json::to_string(&point.openmath_serde()).expect("should be defined");
-    println!("{}", json); // Outputs OpenMath JSON representation
-}
-```
-[^1]: <https://openmath.org/standard/om20-2019-07-01/omstd20.html#sec_json-the-json-encoding>
+/*! <span style="font-variant:small-caps;">OpenMath</span> Serialization;
+ * [OMSerializable] and related types
 */
 
 use std::{borrow::Cow, fmt::Write};
@@ -71,11 +16,28 @@ pub trait Error {
     fn custom(err: impl std::fmt::Display) -> Self;
 }
 
-/** Trait for types that can be serialized to OpenMath format.
+/** Trait for types that can be serialized to <span style="font-variant:small-caps;">OpenMath</span>.
 
-This trait defines how a Rust type should be represented as an OpenMath object.
+This trait defines how a Rust type should be represented as an
+<span style="font-variant:small-caps;">OpenMath</span> object.
+Serialization uses a [serde](https://docs.rs/serde)-style architecture to avoid allocations
+and cloning wherever possible.
 The serialization process is delegated to an [`OMSerializer`] implementation,
-allowing the same type to be serialized to different output formats.
+allowing the same type to be serialized to different output formats, e.g.:
+
+- <code>self.[openmath_display](OMSerializable::openmath_display)()</code> implements
+  [Debug](std::fmt::Debug) and [Display](std::fmt::Display) using the <span style="font-variant:small-caps;">OpenMath</span> XML tags
+  as prefix (see below for an example)
+- With the `serde`-feature active, serialize to any serde-compatible format by using
+  <code>self.[openmath_serde()](OMSerializable::openmath_serde())</code>
+  instead of `self` (requires the `serde` feature).
+  The implementation follows the official <span style="font-variant:small-caps;">OpenMath</span> JSON encoding[^1], so using
+  [`serde_json`](https://docs.rs/serde_json) allows for serializing to specification-compliant
+  JSON.
+- <code>self.[xml](OMSerializable::xml)(pretty_printed:bool)</code> implements
+  [Display](std::fmt::Display) using the <span style="font-variant:small-caps;">OpenMath</span>
+  XML specification. Since this does not use any additional crates, this does *not* require
+  the `xml`-feature to be active.
 
 # Examples
 
@@ -125,6 +87,44 @@ impl OMSerializable for Polynomial {
     }
 }
 ```
+
+```rust
+use openmath::{OMSerializable, ser::{OMSerializer,Uri,AsOMS}};
+pub struct Point {
+    x: f64,
+    y: f64,
+}
+impl Point {
+    const URI: Uri<'static> = Uri {
+        cdbase: Some("http://example.org"),
+        cd: "geometry1",
+        name: "point",
+    };
+}
+impl OMSerializable for Point {
+    fn as_openmath<'s,S: OMSerializer<'s>>(
+        &self,
+        serializer: S,
+    ) -> Result<S::Ok, S::Err> {
+        // Represent as OMA: point(x, y)
+        serializer.oma(Self::URI.as_oms(), [self.x, self.y].iter())
+    }
+}
+fn test() {
+    let point = Point { x:1.4, y:7.8 };
+    assert_eq!(
+        point.openmath_display().to_string(),
+        "OMA(OMS(http://example.org/geometry1#point),OMF(1.4),OMF(7.8))"
+    )
+}
+#[cfg(feature="serde")]
+fn serde_test() {
+    let point = Point { x:1.4, y:7.8 };
+    let json = serde_json::to_string(&point.openmath_serde()).expect("should be defined");
+    println!("{}", json); // Outputs OpenMath JSON representation
+}
+```
+[^1]: <https://openmath.org/standard/om20-2019-07-01/omstd20.html#sec_json-the-json-encoding>
 **/
 pub trait OMSerializable {
     #[inline]
@@ -134,13 +134,13 @@ pub trait OMSerializable {
 
     /// Serialize this value using the provided serializer.
     ///
-    /// This method should convert the Rust value into appropriate OpenMath
-    /// representation using the serializer's methods.
+    /// This method should convert the Rust value into appropriate <span style="font-variant:small-caps;">OpenMath</span>
+    /// representation using the [`serializer`](OMSerializer)'s methods.
     ///
     ///
     /// # Errors
-    /// If either the [OMSerializer] erorrs, or this object can't be serialized
-    /// after all (call [`Error::custom`] to return custom error messages).
+    /// If either the [`serializer`](OMSerializer) erorrs, or this object can't be serialized
+    /// as <span style="font-variant:small-caps;">OpenMath</span> after all (call [`Error::custom`] to return custom error messages).
     ///
     /// # Examples
     ///
@@ -160,7 +160,8 @@ pub trait OMSerializable {
     /// ```
     fn as_openmath<'s, S: OMSerializer<'s>>(&self, serializer: S) -> Result<S::Ok, S::Err>;
 
-    /// OpenMath-style [Debug](std::fmt::Debug) and [Display](std::fmt::Display) implementations
+    /// <span style="font-variant:small-caps;">OpenMath</span>-style
+    /// [Debug](std::fmt::Debug) and [Display](std::fmt::Display) implementations
     ///
     /// # Examples
     ///
@@ -178,8 +179,8 @@ pub trait OMSerializable {
     /// Create a serde-compatible serializer wrapper.
     ///
     /// This method returns a wrapper that implements [`serde::Serialize`],
-    /// allowing OpenMath objects to be serialized using any serde-compatible
-    /// format (JSON, XML, YAML, etc.).
+    /// allowing self to be serialized as an <span style="font-variant:small-caps;">OpenMath</span>
+    /// object using any serde-compatible format (JSON, XML, YAML, etc.).
     ///
     /// # Examples
     ///
@@ -196,21 +197,18 @@ pub trait OMSerializable {
     #[cfg(feature = "serde")]
     #[inline]
     fn openmath_serde(&self) -> impl ::serde::Serialize + use<'_, Self> {
-        serde_impl::SerdeSerializer(self, self.cdbase(), crate::OPENMATH_BASE_URI)
+        serde_impl::SerdeSerializer(self, self.cdbase(), crate::CD_BASE)
     }
 
     /// Returns something that [`Display`](std::fmt::Display)s
-    /// as the OpenMath XML of this object.
-    ///
-    /// ### Errors
-    /// if [as_openmath](OMSerializable::as_openmath) (or the underlying writer) does
+    /// as the <span style="font-variant:small-caps;">OpenMath</span> XML of this object.
     #[inline]
     fn xml(&self, pretty: bool) -> impl std::fmt::Display {
         xml::XmlDisplay { pretty, o: self }
     }
 
     /// returns this element as something that serializes into an OMOBJ; i.e. a "top-level"
-    /// OpenMath object.
+    /// <span style="font-variant:small-caps;">OpenMath</span> object.
     #[inline]
     fn omobject(&self) -> OMObject<'_, Self> {
         OMObject(self)
@@ -227,8 +225,17 @@ impl<T: OMSerializable + ?Sized> OMSerializable for &T {
         T::as_openmath(self, serializer)
     }
 }
+
+/// Anything that can be a *bound variable* in an [OMBIND](crate::OMKind::OMBIND), possibly with
+/// attributes.
+///
+/// Is implemented for everything that implements [Display](std::fmt::Display),
+/// in which case it is assumed to be the *name* of a variable with no attributes.
 pub trait BindVar {
+    /// Returns the name of this bound variable
     fn name(&self) -> impl std::fmt::Display;
+    /// Returns the attributes of this bound variable. Default implementation
+    /// returns an empy iterator.
     #[inline]
     fn attrs(&self) -> impl ExactSizeIterator<Item: OMAttr> {
         std::iter::empty::<(&Uri<'static>, &str)>()
@@ -240,11 +247,41 @@ impl<D: std::fmt::Display> BindVar for &D {
         self
     }
 }
+
+/// Anything that represents a key-value pair <code>[OMS](crate::OMKind::OMS)==[OpenMath|OMFOREIGN](OMOrForeign)</code>
+///
+/// Is implemented for `(&S,&O)` for anything where <code>S:[AsOMS]</code> (key) and
+/// <code>O:[OMOrForeign]</code> (value).
 pub trait OMAttr {
+    /// The key of the key-value-pair; must be representable as
+    /// [`OMS`](crate::OMKind::OMS)
     fn symbol(&self) -> impl AsOMS;
+    /// The value of the key-value-pair; must be representable as
+    /// either an [`OMSerializable`] or an [OMFOREIGN](crate::OMKind::OMFOREIGN).
     fn value(&self) -> impl OMOrForeign;
 }
+
+impl<'a, O: ?Sized, S: AsOMS + ?Sized> OMAttr for (&'a S, &'a O)
+where
+    &'a O: OMOrForeign,
+{
+    #[inline]
+    fn symbol(&self) -> impl AsOMS {
+        self.0
+    }
+    #[inline]
+    fn value(&self) -> impl OMOrForeign {
+        self.1
+    }
+}
+
+/// Something that can be either an [`OMSerializable`] or an [OMFOREIGN](crate::OMKind::OMFOREIGN).
+///
+/// Is implemented for anything that implements [`OMSerializable`]. For
+/// [OMFOREIGN](crate::OMKind::OMFOREIGN), see [`om_or_foreign`](OMOrForeign::om_or_foreign)
 pub trait OMOrForeign {
+    /// Returns either an [`OMSerializable`], or a pair
+    /// <code>(encoding:[Option]<[Display](std::fmt::Display)>,foreign:[Display](std::fmt::Display))</code>
     fn om_or_foreign(
         self,
     ) -> crate::either::Either<
@@ -262,48 +299,11 @@ impl<O: OMSerializable> OMOrForeign for O {
         crate::either::Either::Left::<Self, (Option<&&str>, &&str)>(self)
     }
 }
-impl<'a, O: ?Sized, S: AsOMS + ?Sized> OMAttr for (&'a S, &'a O)
-where
-    &'a O: OMOrForeign,
-{
-    #[inline]
-    fn symbol(&self) -> impl AsOMS {
-        self.0
-    }
-    #[inline]
-    fn value(&self) -> impl OMOrForeign {
-        self.1
-    }
-}
-/*
-pub struct OMAttrSerializable<
-    'f,
-    OM: OMSerializable = String,
-    F: std::fmt::Display + ?Sized = String,
-> {
-    pub cdbase: Option<Cow<'f, str>>,
-    pub cd: Cow<'f, str>,
-    pub name: Cow<'f, str>,
-    pub value: OMForeignSerializable<'f, OM, F>,
-}
 
-pub enum OMForeignSerializable<
-    'f,
-    OM: OMSerializable = String,
-    F: std::fmt::Display + ?Sized = String,
-> {
-    OM(&'f OM),
-    Foreign {
-        encoding: Option<&'f str>,
-        value: &'f F,
-    },
-}
- */
-
-/// Trait for serializers that can produce OpenMath output.
+/// Trait for serializers that can produce <span style="font-variant:small-caps;">OpenMath</span> output.
 ///
-/// This trait defines the interface for converting OpenMath constructs into
-/// various output formats. Implementors provide methods for each OpenMath
+/// This trait defines the interface for converting <span style="font-variant:small-caps;">OpenMath</span> constructs into
+/// various output formats. Implementors provide methods for each <span style="font-variant:small-caps;">OpenMath</span>
 /// object type (OMI, OMF, OMSTR, etc.).
 ///
 /// # Design Pattern
@@ -319,21 +319,32 @@ pub trait OMSerializer<'s>: Sized {
     /// The type of serialization errors.
     type Err: Error;
 
+    /// Return type when locally changing the current cdbase
+    /// (using [`with_cdbase`](OMSerializer::with_cdbase));
+    /// usually just `Self` with a different lifetime.
     type SubSerializer<'ns>: OMSerializer<'ns, Ok = Self::Ok, Err = Self::Err>
     where
         's: 'ns;
 
+    /// Returns the current cdbase used during serialization.
     fn current_cdbase(&self) -> &str;
+
+    /// Set the current cdbase; It is the [`OMSerializer`]'s responsibility to actually
+    /// insert it at the next suitable "node", if necessary
+    ///
     /// ### Errors
+    /// if the [`OMSerializer`] deems it so.
     fn with_cdbase<'ns>(self, cdbase: &'ns str) -> Result<Self::SubSerializer<'ns>, Self::Err>
     where
         's: 'ns;
 
-    /** Serialize an OpenMath integer (OMI).
+    /** Serialize an <span style="font-variant:small-caps;">OpenMath</span> integer
+    ([OMI](crate::OMKind::OMI)).
 
     # Errors
-    If either the [OMSerializer] erorrs, or this object can't be serialized
-    after all (call [`Error::custom`] to return custom error messages).
+    If either the [`OMSerializer`] erorrs, or this object can't be serialized
+    represented as <span style="font-variant:small-caps;">OpenMath</span> after all
+    (use [`Error::custom`] to return a custom error messages).
 
     # Examples
 
@@ -353,11 +364,13 @@ pub trait OMSerializer<'s>: Sized {
     */
     fn omi(self, value: &crate::Int) -> Result<Self::Ok, Self::Err>;
 
-    /** Serialize an OpenMath floating point number (OMF).
+    /** Serialize an <span style="font-variant:small-caps;">OpenMath</span> floating point number
+    ([OMF](crate::OMKind::OMF)).
 
     # Errors
-    If either the [OMSerializer] erorrs, or this object can't be serialized
-    after all (call [`Error::custom`] to return custom error messages).
+    If either the [`OMSerializer`] erorrs, or this object can't be serialized
+    represented as <span style="font-variant:small-caps;">OpenMath</span> after all
+    (use [`Error::custom`] to return a custom error messages).
 
     # Examples
 
@@ -377,11 +390,13 @@ pub trait OMSerializer<'s>: Sized {
     */
     fn omf(self, value: f64) -> Result<Self::Ok, Self::Err>;
 
-    /** Serialize an OpenMath string (OMSTR).
+    /** Serialize an <span style="font-variant:small-caps;">OpenMath</span> string
+    ([OMSTR](crate::OMKind::OMSTR)).
 
     # Errors
-    If either the [OMSerializer] erorrs, or this object can't be serialized
-    after all (call [`Error::custom`] to return custom error messages).
+    If either the [`OMSerializer`] erorrs, or this object can't be serialized
+    represented as <span style="font-variant:small-caps;">OpenMath</span> after all
+    (use [`Error::custom`] to return a custom error messages).
 
     # Examples
 
@@ -401,11 +416,13 @@ pub trait OMSerializer<'s>: Sized {
     */
     fn omstr(self, string: impl std::fmt::Display) -> Result<Self::Ok, Self::Err>;
 
-    /** Serialize an OpenMath byte array (OMB).
+    /** Serialize an <span style="font-variant:small-caps;">OpenMath</span> byte array
+    ([OMB](crate::OMKind::OMB)).
 
     # Errors
-    If either the [OMSerializer] erorrs, or this object can't be serialized
-    after all (call [`Error::custom`] to return custom error messages).
+    If either the [`OMSerializer`] erorrs, or this object can't be serialized
+    represented as <span style="font-variant:small-caps;">OpenMath</span> after all
+    (use [`Error::custom`] to return a custom error messages).
 
     # Examples
 
@@ -425,11 +442,17 @@ pub trait OMSerializer<'s>: Sized {
     */
     fn omb(self, bytes: impl ExactSizeIterator<Item = u8>) -> Result<Self::Ok, Self::Err>;
 
-    /** Serialize an OpenMath variable (OMV).
+    /** Serialize an <span style="font-variant:small-caps;">OpenMath</span> variable
+    ([OMV](crate::OMKind::OMV)).
 
     # Errors
-    If either the [OMSerializer] erorrs, or this object can't be serialized
-    after all (call [`Error::custom`] to return custom error messages).
+    If either the [`OMSerializer`] erorrs, or this object can't be serialized
+    represented as <span style="font-variant:small-caps;">OpenMath</span> after all
+    (use [`Error::custom`] to return a custom error messages).
+
+    <code>[Omv] (...).[as_openmath](OMSerializable::as_openmath)()</code> produces an
+    [OMV](crate::OMKind::OMV),
+    which may occasionally be more convenient.
 
     # Examples
 
@@ -450,19 +473,26 @@ pub trait OMSerializer<'s>: Sized {
     fn omv(self, name: impl std::fmt::Display) -> Result<Self::Ok, Self::Err>;
 
     #[allow(rustdoc::bare_urls)]
-    /** Serialize an OpenMath symbol (OMS).
+    /** Serialize an <span style="font-variant:small-caps;">OpenMath</span> symbol
+    ([OMS](crate::OMKind::OMS)).
 
-    OpenMath symbols are identified by their URI (e.g. `http://www.openmath.org/cd/arith1#plus`), which in all official serialization
+    <span style="font-variant:small-caps;">OpenMath</span> symbols are identified by their URI (e.g. `http://www.openmath.org/cd/arith1#plus`), which in all official serialization
     methods is split into three components:
-    - The name of the symbol (`plus`)
-    - The name of the content dictionary containing the symbol (`arith1`)
-    - The base Url of the content dictionary (`http://www.openmath.org/cd`). This is
-      provided using the [`with_cdbase`](OMSerializer::with_cdbase)-method
+    - `name`: The name of the symbol (`plus`)
+    - `cd`: The name of the content dictionary containing the symbol (`arith1`)
+    - `cdbase`: The base Url of the content dictionary (`http://www.openmath.org/cd`). This is
+      provided using the [`with_cdbase`](OMSerializer::with_cdbase)-method instead,
+      since it is inherited in all <span style="font-variant:small-caps;">OpenMath</span>
+      serialization formats.
 
+    <code>[Uri]{...}.[as_oms](AsOMS::as_oms)().[as_openmath](OMSerializable::as_openmath)()</code> produces an
+    [OMS](crate::OMKind::OMS),
+    which may occasionally be more convenient.
 
     # Errors
-    If either the [OMSerializer] erorrs, or this object can't be serialized
-    after all (call [`Error::custom`] to return custom error messages).
+    If either the [`OMSerializer`] erorrs, or this object can't be serialized
+    represented as <span style="font-variant:small-caps;">OpenMath</span> after all
+    (use [`Error::custom`] to return a custom error messages).
 
     # Examples
 
@@ -485,18 +515,20 @@ pub trait OMSerializer<'s>: Sized {
     */
     fn oms(
         self,
-        cd_name: impl std::fmt::Display,
+        cd: impl std::fmt::Display,
         name: impl std::fmt::Display,
     ) -> Result<Self::Ok, Self::Err>;
 
-    /** Serialize an OpenMath application (OMA).
+    /** Serialize an <span style="font-variant:small-caps;">OpenMath</span> application
+    ([OMA](crate::OMKind::OMA)).
 
-    An OMA represent an application fo some OpenMath Object to a list of arguments, e.g. $2 + 2$
+    An OMA represent an application of some <span style="font-variant:small-caps;">OpenMath</span> Object to a list of arguments, e.g. $2 + 2$
     would be represented as `OMA(OMS(plus),[OMI(2),OMI(2)])`.
 
     # Errors
-    If either the [OMSerializer] erorrs, or this object can't be serialized
-    after all (call [`Error::custom`] to return custom error messages).
+    If either the [`OMSerializer`] erorrs, or this object can't be serialized
+    represented as <span style="font-variant:small-caps;">OpenMath</span> after all
+    (use [`Error::custom`] to return a custom error messages).
 
     # Examples
 
@@ -526,13 +558,15 @@ pub trait OMSerializer<'s>: Sized {
         args: impl ExactSizeIterator<Item: OMSerializable>,
     ) -> Result<Self::Ok, Self::Err>;
 
-    /** Serialize an OpenMath attribution (OMATTR).
+    /** Serialize an <span style="font-variant:small-caps;">OpenMath</span> attribution
+    ([OMATTR](crate::OMKind::OMATTR)).
 
     `name` and `cd_name` are those of the URI of the error symbol.
 
     # Errors
-    If either the [OMSerializer] erorrs, or this object can't be serialized
-    after all (call [`Error::custom`] to return custom error messages).
+    If either the [`OMSerializer`] erorrs, or this object can't be serialized
+    represented as <span style="font-variant:small-caps;">OpenMath</span> after all
+    (use [`Error::custom`] to return a custom error messages).
     */
     fn omattr(
         self,
@@ -540,13 +574,15 @@ pub trait OMSerializer<'s>: Sized {
         atp: impl OMSerializable,
     ) -> Result<Self::Ok, Self::Err>;
 
-    /** Serialize an OpenMath error (OME).
+    /** Serialize an <span style="font-variant:small-caps;">OpenMath</span> error
+    ([OME](crate::OMKind::OME)).
 
     `name` and `cd_name` are those of the URI of the error symbol.
 
     # Errors
-    If either the [OMSerializer] erorrs, or this object can't be serialized
-    after all (call [`Error::custom`] to return custom error messages).
+    If either the [`OMSerializer`] erorrs, or this object can't be serialized
+    represented as <span style="font-variant:small-caps;">OpenMath</span> after all
+    (use [`Error::custom`] to return a custom error messages).
     */
     fn ome(
         self,
@@ -554,15 +590,17 @@ pub trait OMSerializer<'s>: Sized {
         args: impl ExactSizeIterator<Item: OMOrForeign>,
     ) -> Result<Self::Ok, Self::Err>;
 
-    /** Serialize an OpenMath binding construct (OMBIND).
+    /** Serialize an <span style="font-variant:small-caps;">OpenMath</span> binding construct
+    ([OMBIND](crate::OMKind::OMBIND)).
 
     OMBIND represents constructs that bind variables, such as
     quantifiers ($\forall x, \exists x$),
     lambda expressions ($\lambda x.f(x)$) etc.
 
     # Errors
-    If either the [OMSerializer] erorrs, or this object can't be serialized
-    after all (call [`Error::custom`] to return custom error messages).
+    If either the [`OMSerializer`] erorrs, or this object can't be serialized
+    represented as <span style="font-variant:small-caps;">OpenMath</span> after all
+    (use [`Error::custom`] to return a custom error messages).
 
     # Examples
 
@@ -601,30 +639,12 @@ pub trait OMSerializer<'s>: Sized {
         body: impl OMSerializable,
     ) -> Result<Self::Ok, Self::Err>;
 }
-/*
-pub trait IntoVars<'a, St: std::fmt::Display + 'a> {
-    fn vars(
-        self,
-    ) -> impl ExactSizeIterator<Item = (&'a St, &'a [&'a OMAttrSerializable<'a, String, St>])>;
-}
-impl<'a, St: std::fmt::Display + 'a, I: IntoIterator<Item = &'a St>> IntoVars<'a, St> for I
-where
-    I::IntoIter: ExactSizeIterator,
-{
-    fn vars(
-        self,
-    ) -> impl ExactSizeIterator<Item = (&'a St, &'a [&'a OMAttrSerializable<'a, String, St>])> {
-        <Self as IntoIterator>::into_iter(self)
-            .map::<(&'a St, &'a [&'a OMAttrSerializable<'a, String, St>]), _>(|s| (s, &[]))
-    }
-}
-*/
 
-/// Wrapper that produces an OMOBJ wrapper in serialization
+/// Wrapper that produces an OMOBJ node in serialization
 pub struct OMObject<'s, O: OMSerializable + ?Sized>(pub &'s O);
 impl<O: OMSerializable + ?Sized> OMObject<'_, O> {
-    /// Returns something that `[Display]`(std::fmt::Display)s as the OpenMath XML
-    /// of this object
+    /// Returns something that `[Display]`(std::fmt::Display)s as the <span style="font-variant:small-caps;">OpenMath</span> XML
+    /// of this object.
     ///
     /// ### Errors
     /// if [as_openmath](OMSerializable::as_openmath) or the underlying writer does
@@ -653,10 +673,12 @@ impl<O: OMSerializable> std::fmt::Display for OMObject<'_, O> {
 
 /// trait for things that can be serialized as an [OMS](crate::OMKind::OMS); i.e. things
 /// that have a URI.
+///
+/// Implemented by e.g. [`Uri`]
 pub trait AsOMS {
     /// The cdbase of this URI. `current_cdbase` is the current namespace during
     /// serialization. This allows to return `None` if the current cdbase is already
-    /// this one anyway
+    /// this one anyway (in case we want to avoid allocating a new string)
     fn cdbase(&self, _current_cdbase: &str) -> Option<Cow<'_, str>> {
         None
     }
@@ -664,6 +686,9 @@ pub trait AsOMS {
     fn cd(&self) -> impl std::fmt::Display;
     /// The name of the symbol represented by this URI
     fn name(&self) -> impl std::fmt::Display;
+    /// Returns this as something that implements [`OMSerializable`]. A default blanket
+    /// implementation of [`OMSerializable`] for anything that implements [`AsOMS`]
+    /// would be preferable, but qould require [specialization](https://rust-lang.github.io/rfcs/1210-impl-specialization.html).
     fn as_oms(&self) -> impl OMSerializable {
         struct AsOM<'a, A: AsOMS + ?Sized>(&'a A);
         impl<A: AsOMS + ?Sized> OMSerializable for AsOM<'_, A> {
@@ -700,7 +725,7 @@ impl<A: AsOMS + ?Sized> AsOMS for &A {
 /// ```rust
 /// use openmath::ser::Uri;
 /// const URI:Uri<'static> = Uri {
-///     cdbase:Some("http://www.openmath.org/cd"),
+///     cdbase:Some(openmath::CD_BASE),
 ///     cd:&"fns1",
 ///     name:&"lambda"
 /// };
@@ -711,7 +736,7 @@ where
     CD: std::fmt::Display,
     Name: std::fmt::Display,
 {
-    /// The content dictionary base
+    /// The content dictionary base (optional; inherited if `None`)
     pub cdbase: Option<&'s str>,
     /// The name of the content dictionary
     pub cd: CD,
@@ -806,7 +831,6 @@ impl OMSerializable for Vec<u8> {
     }
 }
 
-// Implement for integer types by converting to Int
 macro_rules! impl_int_serializable {
     ($($t:ty),*) => {
         $(
@@ -857,7 +881,7 @@ impl<O: OMSerializable + ?Sized> std::fmt::Display for OMDisplay<'_, O> {
             .as_openmath(DisplaySerializer {
                 f,
                 next_ns: self.1,
-                current_ns: crate::OPENMATH_BASE_URI,
+                current_ns: crate::CD_BASE,
             })
             .map_err(Into::into)
     }
@@ -903,7 +927,7 @@ impl DisplaySerializer<'_, '_> {
                 DisplaySerializer {
                     f: self.f,
                     next_ns: Some(next),
-                    current_ns: crate::OPENMATH_BASE_URI,
+                    current_ns: crate::CD_BASE,
                 }
             }
         } else {

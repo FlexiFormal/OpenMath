@@ -1,4 +1,4 @@
-/*! OpenMath Deserialization; [OMDeserializable] and related types
+/*! <span style="font-variant:small-caps;">OpenMath</span> Deserialization; [OMDeserializable] and related types
 */
 
 //#[cfg(feature = "serde")]
@@ -16,43 +16,41 @@ pub use serde_impl::OMFromSerde;
 pub type OMAttr<'o, I> = crate::Attr<'o, crate::OMMaybeForeign<'o, I>>;
 
 #[allow(rustdoc::redundant_explicit_links)]
-/**  Trait for types that can be deserialized from OpenMath objects.
-
-This trait defines how a Rust type can be constructed from an OpenMath
-representation. The deserialization process either succeeds (returning the
-target type) or fails gracefully (returning the original OpenMath object).
+/**  Trait for types that can be deserialized from
+<span style="font-variant:small-caps;">OpenMath</span> objects.
 
 Deserialization is driven by the [`from_openmath`](OMDeserializable::from_openmath)-method
-which gets an [`OM`] and can return either
-- a `Self`, if the OpenMath expression represent a Self, or
-- the original expression if it can not get deserialized (*yet*), or
-- an error.
+which gets an [`OM`] and can return an arbitrary intermediate type [`Ret`](OMDeserializable::Ret) --
+in the simplest case, <code>[Ret](OMDeserializable::Ret) == Self</code>.
 
 During deserialization, The method is called "from the bottom up" starting with the leafs.
 If e.g. the expression is `OMA( OMS(s1), OMA( OMS(s2), OMI(1) ), OMI(3) )`, then this method
 gets called successively with `OMS(s1)`, `OMS(s2)`, `OMI(1)`, `OMA( OMS(s2), OMI(1) )`, `OMI(3)`,
-and finally `OMA( OMS(s1), OMA( OMS(s2), OMI(1) ), OMI(3) )`.
-(See below for an example.)
-
-### Built-in Deserializers
-- **Serde-based** Deserialize from any [serde](https://docs.rs/serde)-compatible format by deserializing
-  an <code>[OMFromSerde](serde_impl::OMFromSerde)<'d,MyType></code> instead,
-  and calling [`into_inner()`](serde_impl::OMFromSerde::into_inner) on the result
-  to get the `MyType`. (requires the `serde`-feature)
-  If the last call to [`from_openmath`](OMDeserializable::from_openmath) is
-  not a full <code>[Ok](Result::Ok)(MyType)</code>, serde deserialization will return
-  an error already.
-  The implementation follows the official OpenMath JSON encoding[^1], so using
-  [`serde_json`](https://docs.rs/serde_json) allows for deserializing specification-compliant
-  JSON.
+and finally `OMA( OMS(s1), OMA( OMS(s2), OMI(1) ), OMI(3) )`
+(See below for an example).
+Deserialization is considered to have failed (and
+will return an Error), if for the *final* instance `r` of [`Ret`](OMDeserializable::Ret),
+<code>r.[try_into](TryInto::try_into)()</code> errors.
 
 `'de` is the lifetime of the deserialized data; tied to the e.g. string from which it gets
-serialized. If `Self` should be entirely owned, implement [`OMDeserializableOwned`]
-instead; which provides a blanket implementation for <code>[OMDeserializableOwned]<'static,[Vec]<[u8]>,[String]></code>
+serialized. [`OMDeserializableOwned`] indicates that *owned* values
+can be deserialized, and is implemented for any <code>S where for<'a> S:[OMDeserializable]<'s></code>.
+
+- With the `serde`-feature active, deserialize from any serde-compatible format
+  by deserializing a [OMFromSerde](serde_impl::OMFromSerde) instead (see below for an example).
+  The implementation follows the official <span style="font-variant:small-caps;">OpenMath</span> JSON
+  encoding[^1], so using
+  [`serde_json`](https://docs.rs/serde_json) allows for deserializing from specification-compliant
+  JSON.
+- With the `xml`-feature active, deserialize <span style="font-variant:small-caps;">OpenMath</span> XML
+  from a `&'de str` using [from_openmath_xml](OMDeserializable::from_openmath_xml).
+  If `Self` can be deserialized into owned values (i.e. implements <code>for<'a> [OMDeserializable]<'a></code>),
+  the [`OMDeserializableOwned`] trait also provides
+  <code>[from_openmath_xml_reader](OMDeserializableOwned::from_openmath_xml_reader)<R: [BufRead](std::io::BufRead)></code>.
 
 # Examples
 
-We can deserialize an OpenMath expression using addition and multiplication
+We can deserialize an <span style="font-variant:small-caps;">OpenMath</span> expression using addition and multiplication
 to an `i128` directly; like so:
 ```rust
 # #[cfg(feature="serde")]
@@ -155,13 +153,14 @@ let s = r#"{
         { "kind":"OMI", "integer":2 }
     ]
 }"#;
+// If the serde-feature is active:
 let r = serde_json::from_str::<'_, OMFromSerde<SimplifiedInt>>(s)
     .expect("valid json, openmath, and arithmetic expression");
 assert_eq!(r.into_inner().0, 4);
 # #[cfg(feature = "xml")]
 # {
-    // If the xml feature is active:
-    let s = r#"
+// If the xml-feature is active:
+let s = r#"
 <OMA cdbase="http://www.openmath.org/cd">
   <OMS cd="arith1" name="plus"/>
   <OMI>2</OMI>
@@ -173,7 +172,6 @@ assert_eq!(r.into_inner().0, 4);
 # }
 # }
 ```
-
 [^1]: <https://openmath.org/standard/om20-2019-07-01/omstd20.html#sec_json-the-json-encoding>
 */
 pub trait OMDeserializable<'de>: std::fmt::Debug {
@@ -187,16 +185,13 @@ pub trait OMDeserializable<'de>: std::fmt::Debug {
     /// The type of errors that can occur during deserialization.
     type Err: std::fmt::Display;
 
-    /// Attempt to deserialize an OpenMath object into this type.
+    /// Attempt to deserialize an <span style="font-variant:small-caps;">OpenMath</span> object
+    /// into this type.
     ///
     /// # Errors
-    /// This method examines the provided OpenMath object and either:
-    #[allow(rustdoc::redundant_explicit_links)]
-    /// 1. Successfully converts it to the target type (returns <code>[Ok](Result::Ok)([Left](either::Either::Left)(T))</code>)
-    /// 2. Determines it cannot be converted *yet*, but maybe later in an OMA or OMBIND, and returns the
-    #[allow(rustdoc::redundant_explicit_links)]
-    ///    original object (<code>[Ok](Result::Ok)([Right](either::Either::Right)(om))</code>)
-    /// 3. Encounters an error during processing ([`Err`])
+    /// If the provided [OM] can not be converted into a [`Ret`](OMDeserializable::Ret),
+    /// meaning: it does not represent an meaningful intermediate result
+    /// on the way to constructing a `Self`
     ///
     /// # Examples
     /// See [trait documentation](OMDeserializable)
@@ -206,11 +201,13 @@ pub trait OMDeserializable<'de>: std::fmt::Debug {
         Self: Sized;
 
     #[cfg(feature = "xml")]
-    /// Deserializes self from a string of OpenMath XML.
+    /// Deserializes self from a string of <span style="font-variant:small-caps;">OpenMath</span> XML.
     ///
     /// # Errors
-    /// iff the string provided is invalid XML, or invalid OpenMath, or [from_openmath](OMDeserializable::from_openmath)
-    /// errors.
+    /// iff the string provided is invalid XML, or invalid
+    /// <span style="font-variant:small-caps;">OpenMath</span>, or
+    /// [from_openmath](OMDeserializable::from_openmath) errors.
+    ///
     /// # Examples
     /// See [trait documentation](OMDeserializable)
     fn from_openmath_xml(input: &'de str) -> Result<Self, xml::XmlReadError<Self::Err>>
@@ -221,19 +218,18 @@ pub trait OMDeserializable<'de>: std::fmt::Debug {
         <xml::FromString<'de> as Readable<'de, Self>>::new(input).read(None)
     }
 }
-/// Trait for types that can be deserialized as owned values OpenMath objects.
+/// Trait for types that can be deserialized as owned values from
+/// <span style="font-variant:small-caps;">OpenMath</span> objects.
 ///
-/// This is a specialized version of [`OMDeserializable`] for cases where you
-/// need owned data (`String` and `Vec<u8>`) rather than borrowed data. This
-/// is useful when the deserialized object needs to outlive the source data.
-///
-/// Also provides blanket implementations for [`OMDeserializable`].
+/// Implemented primarily (and automatically) for types that
+/// implement <code>for<'a> [OMDeserializable]<'a></code>.
 pub trait OMDeserializableOwned: for<'d> OMDeserializable<'d> {
     #[cfg(feature = "xml")]
-    /// Deserializes self from any [Read](std::io::BufRead) of OpenMath XML.
+    /// Deserializes self from any [Read](std::io::BufRead) of <span style="font-variant:small-caps;">OpenMath</span> XML.
     ///
     /// # Errors
-    /// iff the by stream provided is invalid UTF8, XML, or OpenMath, or
+    /// iff the by stream provided is invalid UTF8, XML, or
+    /// <span style="font-variant:small-caps;">OpenMath</span>, or
     /// [from_openmath](OMDeserializable::from_openmath)
     /// errors.
     /// # Examples
@@ -251,77 +247,31 @@ pub trait OMDeserializableOwned: for<'d> OMDeserializable<'d> {
 }
 
 /// Blanket implementation to allow owned deserializable types to work with the borrowed trait.
-///
-/// This implementation allows any type that implements [`OMDeserializableOwned`]
-/// to automatically work with the [`OMDeserializable`] trait when using owned
-/// data types.
 impl<O> OMDeserializableOwned for O where O: for<'de> OMDeserializable<'de> {}
 
-/// Wrapper to deserialize an OMOBJ
+/// Wrapper to deserialize an OMOBJ value.
 pub struct OMObject<'de, O: OMDeserializable<'de>>(O, std::marker::PhantomData<&'de ()>);
 impl<'de, O: OMDeserializable<'de>> OMObject<'de, O> {
+    /// Returns the deserialized value.
     #[inline]
     pub fn into_inner(self) -> O {
         self.0
     }
 
-    /** Deserializes an OMDeserializable from an XML string that contains an `<OMOBJ>`
+    /** Deserializes an [OMDeserializable] from an XML string starting with `<OMOBJ>`
+     *
     # Errors
-    iff the string provided is invalid XML, or invalid OpenMath, or [from_openmath](OMDeserializable::from_openmath)
+    iff the string provided is invalid XML, or invalid <span style="font-variant:small-caps;">OpenMath</span>, or [from_openmath](OMDeserializable::from_openmath)
     errors.
 
     # Examples
     ```
     use openmath::de::{OMDeserializable, OM, OMObject};
-    #[derive(Copy, Clone, Debug)]
-    struct Oma;
-    enum ArgOrOMA {
-        Oms,
-        Omi,
-        Oma,
-    }
-    impl TryFrom<ArgOrOMA> for Oma {
-        type Error = &'static str;
-        fn try_from(value: ArgOrOMA) -> Result<Self, Self::Error> {
-            if matches!(value, ArgOrOMA::Oma) {
-                Ok(Self)
-            } else {
-                Err("nope")
-            }
-        }
-    }
-    impl<'d> OMDeserializable<'d> for Oma {
-        type Ret = ArgOrOMA;
-        type Err = &'static str;
-        fn from_openmath(om: OM<'d, ArgOrOMA>, _cdbase: &str) -> Result<Self::Ret, Self::Err>
-        where
-            Self: Sized,
-        {
-            match om {
-                OM::OMA {
-                    applicant: ArgOrOMA::Oms,
-                    arguments,
-                    ..
-                } if arguments.len() == 2
-                    && arguments.iter().all(|a| matches!(a, ArgOrOMA::Omi)) =>
-                {
-                    Ok(ArgOrOMA::Oma)
-                }
-                OM::OMS { .. } => Ok(ArgOrOMA::Oms),
-                OM::OMI { .. } => Ok(ArgOrOMA::Omi),
-                _ => Err("nope"),
-            }
-        }
-    }
 
     let s = r#"<OMOBJ cdbase="http://www.openmath.org/cd">
-      <OMA>
-        <OMS cd="arith1" name="plus"/>
-        <OMI>2</OMI>
-        <OMI>2</OMI>
-      </OMA>
+      <OMI>2</OMI>
     </OMOBJ>"#;
-    OMObject::<Oma>::from_openmath_xml(s).expect("is valid");
+    assert_eq!(OMObject::<i32>::from_openmath_xml(s).expect("is valid"),2);
     ```
     */
     #[cfg(feature = "xml")]
@@ -335,16 +285,16 @@ impl<'de, O: OMDeserializable<'de>> OMObject<'de, O> {
     }
 }
 
-/// Enum for deserializing from OpenMath. See
+/// Enum for deserializing from <span style="font-variant:small-caps;">OpenMath</span>. See
 /// see [OMDeserializable] for documentation and an example.
 ///
 /// Note that there is no case for [OMATTR](crate::OMKind::OMATTR) - instead,
 /// every case has a <code>[Vec]<[OMAttr]<'de, I>></code>, which is usually empty.
 /// Otherwise, we'd have to either deal with two separate types, or have the
 /// nonsensical case `OMATTR(OMATTR(OMATTR(...),...),...)`, which would also
-/// require a [`Box`]-indirection (hence allocation), etc. since OMATTRS is mostly used
+/// require a [`Box`]-indirection (hence allocation), etc. since OMATTR is mostly used
 /// for metadata which the recipient might not even care about, or only care secondarily
-/// (compared to the *actual* OM-kind), having OMATTR be a separate case seems
+/// (compared to the *actual* [OM]-kind), having OMATTR be a separate case seems
 /// like bad API design.
 /// Also, empty Vecs are cheap.
 #[derive(Debug, Clone)]
@@ -410,7 +360,7 @@ pub enum OM<'de, I> {
     /// not explicit in these fields but whose values may be obtained by inspecting the Content
     /// Dictionary specified. These include the symbol definition, formal properties and examples
     /// and, optionally, a role which is a restriction on where the symbol may appear in an
-    /// OpenMath object. The possible roles are described in
+    /// <span style="font-variant:small-caps;">OpenMath</span> object. The possible roles are described in
     /// [Section 2.1.4](https://openmath.org/standard/om20-2019-07-01/omstd20.html#sec_roles).
     ///
     ///</div>
@@ -421,8 +371,8 @@ pub enum OM<'de, I> {
     } = OMKind::OMS as _,
 
     /** <div class="openmath">
-    If $A_1,...,A_n\;(n>0)$ are OpenMath objects, then
-    $\mathrm{application}(A_1,...,A_n)$ is an OpenMath application object.
+    If $A_1,...,A_n\;(n>0)$ are <span style="font-variant:small-caps;">OpenMath</span> objects, then
+    $\mathrm{application}(A_1,...,A_n)$ is an <span style="font-variant:small-caps;">OpenMath</span> application object.
     We call $A_1$ the function and $A_2$ to $A_n$ the arguments.
     </div> */
     OMA {
@@ -432,9 +382,9 @@ pub enum OM<'de, I> {
     } = OMKind::OMA as _,
 
     /** <div class="openmath">
-    If $B$ and $C$ are OpenMath objects, and $v_1,...,v_n\;(n\geq0)$
-    are OpenMath variables or attributed variables, then
-    $\mathrm{binding}(B,v_1,...,v_n,C)$ is an OpenMath binding object.
+    If $B$ and $C$ are <span style="font-variant:small-caps;">OpenMath</span> objects, and $v_1,...,v_n\;(n\geq0)$
+    are <span style="font-variant:small-caps;">OpenMath</span> variables or attributed variables, then
+    $\mathrm{binding}(B,v_1,...,v_n,C)$ is an <span style="font-variant:small-caps;">OpenMath</span> binding object.
     $B$ is called the binder, $v_1,...,v_n$ are called variable bindings, and
     $C$ is called the body of the binding object above.
     </div> */
@@ -446,8 +396,8 @@ pub enum OM<'de, I> {
     } = OMKind::OMBIND as _,
 
     /** <div class="openmath">
-    If $S$ is an OpenMath symbol and $A_1,...,A_n\;(n\geq0)$ are OpenMath objects or
-    derived OpenMath objects, then $\mathrm{error}(S,A_1,...,A_n)$ is an OpenMath error object.
+    If $S$ is an <span style="font-variant:small-caps;">OpenMath</span> symbol and $A_1,...,A_n\;(n\geq0)$ are <span style="font-variant:small-caps;">OpenMath</span> objects or
+    derived <span style="font-variant:small-caps;">OpenMath</span> objects, then $\mathrm{error}(S,A_1,...,A_n)$ is an <span style="font-variant:small-caps;">OpenMath</span> error object.
     </div> */
     OME {
         cdbase: Option<Cow<'de, str>>,
@@ -458,6 +408,8 @@ pub enum OM<'de, I> {
     } = OMKind::OME as _,
 }
 impl<I> OM<'_, I> {
+    /// Returns the [OMKind] of this [`OM`], which of all practical purposes
+    /// acts as a discriminant.
     pub fn kind(&self) -> crate::OMKind {
         // SAFETY: Because `Self` is marked `repr(u8)`, its layout is a `repr(C)` `union`
         // between `repr(C)` structs, each of which has the `u8` discriminant as its first
@@ -574,7 +526,6 @@ impl<'d> OMDeserializable<'d> for Vec<u8> {
     }
 }
 
-// Implement for integer types by converting to Int
 macro_rules! impl_int_deserializable {
     ($($t:ty=$err:literal),*) => {
         $(
@@ -767,7 +718,7 @@ mod tests {
                     OM::OMS { cd, name, .. }
                         if cd == "arith1"
                             && (name == "plus" || name == "times")
-                            && cdbase == openmath::OPENMATH_BASE_URI =>
+                            && cdbase == openmath::CD_BASE =>
                     {
                         // works, but without arguments, we can't do anything to it *yet*.
                         // => We send it back, so we can take care of it later, if it
@@ -786,7 +737,7 @@ mod tests {
                         ..
                     } if arguments.iter().all(Either::is_left)
                         && arguments.len() == 2
-                        && cdbase == openmath::OPENMATH_BASE_URI =>
+                        && cdbase == openmath::CD_BASE =>
                     {
                         // An OMA only ends up here, after both the head and all arguments
                         // were fed into this method.

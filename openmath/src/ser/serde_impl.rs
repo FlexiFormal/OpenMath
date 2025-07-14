@@ -1,7 +1,7 @@
-//! # Serde Integration for OpenMath Serialization
+//! # Serde Integration for <span style="font-variant:small-caps;">OpenMath</span> Serialization
 //!
-//! This module provides serde integration for OpenMath serialization, allowing
-//! OpenMath objects to be serialized to any format supported by serde (JSON,
+//! This module provides serde integration for <span style="font-variant:small-caps;">OpenMath</span> serialization, allowing
+//! <span style="font-variant:small-caps;">OpenMath</span> objects to be serialized to any format supported by serde (JSON,
 //! XML, YAML, etc.).
 //!
 //! ## Usage
@@ -53,10 +53,10 @@ impl<O: OMSerializable + ?Sized> serde::Serialize for super::OMObject<'_, O> {
     }
 }
 
-/// Wrapper type that implements `serde::Serialize` for OpenMath objects.
+/// Wrapper type that implements `serde::Serialize` for <span style="font-variant:small-caps;">OpenMath</span> objects.
 ///
 /// This type wraps any `OMSerializable` type and provides a `serde::Serialize`
-/// implementation that uses the OpenMath serialization format. It's created
+/// implementation that uses the <span style="font-variant:small-caps;">OpenMath</span> serialization format. It's created
 /// automatically when you call [`OMSerializable::openmath_serde`].
 ///
 /// # Examples
@@ -98,8 +98,8 @@ impl<OM: crate::OMSerializable> ::serde::Serialize for SerdeSerializer<'_, OM> {
 
 /// Internal wrapper that adapts a serde `Serializer` to implement `OMSerializer`.
 ///
-/// This type bridges the gap between serde's serialization model and OpenMath's
-/// serialization model, allowing OpenMath objects to be serialized to any
+/// This type bridges the gap between serde's serialization model and <span style="font-variant:small-caps;">OpenMath</span>'s
+/// serialization model, allowing <span style="font-variant:small-caps;">OpenMath</span> objects to be serialized to any
 /// serde-compatible format.
 struct Serder<'s, S: ::serde::Serializer> {
     s: S,

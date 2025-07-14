@@ -30,7 +30,7 @@ impl<O: super::OMSerializable + ?Sized> std::fmt::Display for XmlDisplay<'_, O> 
             indent: if self.pretty { Some((false, 0)) } else { None },
             w: f,
             next_ns: self.o.cdbase(),
-            current_ns: crate::OPENMATH_BASE_URI,
+            current_ns: crate::CD_BASE,
         };
         self.o.as_openmath(displayer).map_err(|_| std::fmt::Error)
     }
@@ -46,7 +46,7 @@ impl<O: super::OMSerializable + ?Sized> std::fmt::Display for XmlObjDisplay<'_, 
         f.write_str("<OMOBJ version=\"2.0\"")?;
         if self.insert_namespace {
             f.write_str(" xmlns=\"")?;
-            f.write_str(crate::XML_NAMESPACE)?;
+            f.write_str(crate::XML_NS)?;
             f.write_char('\"')?;
         }
         let ns = if let Some(ns) = self.o.cdbase() {
@@ -55,7 +55,7 @@ impl<O: super::OMSerializable + ?Sized> std::fmt::Display for XmlObjDisplay<'_, 
             f.write_str("\"")?;
             ns
         } else {
-            crate::OPENMATH_BASE_URI
+            crate::CD_BASE
         };
         f.write_char('>')?;
 

@@ -6,9 +6,8 @@ A comprehensive Rust library for handling **<span style="font-variant:small-caps
 ### Serialization & Deserialization
 - [`OMSerializable`] trait for converting Rust types to <span style="font-variant:small-caps;">OpenMath</span>
 - [`OMDeserializable`] trait for parsing <span style="font-variant:small-caps;">OpenMath</span> into Rust types
-- Built-in support for serde-based formats (JSON, etc.) following the
-  OpenMath JSON specification, specification-conform XML (de)serialization., official binary
-  representation is WiP
+- (with `serde` feature enabled:) support for serde-based formats (JSON, etc.) following the
+  OpenMath JSON specification, specification-conform XML (de)serialization (see [`openmath_serde`](OMSerializable::openmath_serde) and [`OMFromSerde`](de::OMFromSerde)).
 
 ## TODO
 
