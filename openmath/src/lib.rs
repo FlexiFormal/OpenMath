@@ -499,7 +499,7 @@ impl<'o> de::OMDeserializable<'o> for OpenMath<'o> {
                 attrs,
             } => Self::OMA {
                 applicant: Box::new(applicant),
-                arguments,
+                arguments: arguments.into_iter().collect(),
                 attributes: attrs,
             },
             OM::OMBIND {

@@ -25,7 +25,10 @@
 use serde::{Deserialize, de::DeserializeSeed};
 use serde_cow::{CowBytes, CowStr};
 
-use crate::{OMDeserializable, OMKind, de::OM};
+use crate::{
+    OMDeserializable, OMKind,
+    de::{Args, Attrs, OM, Vars},
+};
 use std::{borrow::Cow, marker::PhantomData};
 
 type Attr<'e, I> = crate::Attr<'e, OMForeign<'e, I>>;
@@ -320,7 +323,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
     fn visit_seq_omi<A>(
         self,
         _id: Option<CowStr<'de>>,
-        attrs: Vec<Attr<'de, OMD>>,
+        attrs: Attrs<Attr<'de, OMD>>,
         mut seq: A,
     ) -> Result<OMD::Ret, A::Error>
     where
@@ -337,7 +340,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
     fn visit_seq_omf<A>(
         self,
         _id: Option<CowStr<'de>>,
-        attrs: Vec<Attr<'de, OMD>>,
+        attrs: Attrs<Attr<'de, OMD>>,
         mut seq: A,
     ) -> Result<OMD::Ret, A::Error>
     where
@@ -354,7 +357,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
     fn visit_seq_omstr<A>(
         self,
         _id: Option<CowStr<'de>>,
-        attrs: Vec<Attr<'de, OMD>>,
+        attrs: Attrs<Attr<'de, OMD>>,
         mut seq: A,
     ) -> Result<OMD::Ret, A::Error>
     where
@@ -372,7 +375,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
     fn visit_seq_omb<A>(
         self,
         _id: Option<CowStr<'de>>,
-        attrs: Vec<Attr<'de, OMD>>,
+        attrs: Attrs<Attr<'de, OMD>>,
         mut seq: A,
     ) -> Result<OMD::Ret, A::Error>
     where
@@ -390,7 +393,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
     fn visit_seq_omv<A>(
         self,
         _id: Option<CowStr<'de>>,
-        attrs: Vec<Attr<'de, OMD>>,
+        attrs: Attrs<Attr<'de, OMD>>,
         mut seq: A,
     ) -> Result<OMD::Ret, A::Error>
     where
@@ -408,7 +411,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
     fn visit_seq_oms<A>(
         self,
         _id: Option<CowStr<'de>>,
-        attrs: Vec<Attr<'de, OMD>>,
+        attrs: Attrs<Attr<'de, OMD>>,
         mut seq: A,
     ) -> Result<OMD::Ret, A::Error>
     where
@@ -444,7 +447,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
     fn visit_seq_ome<A>(
         self,
         _id: Option<CowStr<'de>>,
-        attrs: Vec<Attr<'de, OMD>>,
+        attrs: Attrs<Attr<'de, OMD>>,
         mut seq: A,
     ) -> Result<OMD::Ret, A::Error>
     where
@@ -488,7 +491,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
     fn visit_seq_oma<A>(
         self,
         _id: Option<CowStr<'de>>,
-        attrs: Vec<Attr<'de, OMD>>,
+        attrs: Attrs<Attr<'de, OMD>>,
         mut seq: A,
     ) -> Result<OMD::Ret, A::Error>
     where
@@ -528,7 +531,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
     fn visit_seq_ombind<A>(
         self,
         _id: Option<CowStr<'de>>,
-        attrs: Vec<Attr<'de, OMD>>,
+        attrs: Attrs<Attr<'de, OMD>>,
         mut seq: A,
     ) -> Result<OMD::Ret, A::Error>
     where
@@ -577,7 +580,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
     fn visit_seq_omattr<A>(
         self,
         _id: Option<CowStr<'de>>,
-        mut attrs: Vec<Attr<'de, OMD>>,
+        mut attrs: Attrs<Attr<'de, OMD>>,
         mut seq: A,
     ) -> Result<OMD::Ret, A::Error>
     where
@@ -631,7 +634,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         attributes: Option<serde::__private::de::Content<'de>>,
         mut object: Option<serde::__private::de::Content<'de>>,
         mut map: A,
-        mut attrs: Vec<Attr<'de, OMD>>,
+        mut attrs: Attrs<Attr<'de, OMD>>,
     ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
@@ -692,7 +695,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         mut decimal: Option<CowStr<'de>>,
         mut hexadecimal: Option<CowStr<'de>>,
         mut map: A,
-        attrs: Vec<Attr<'de, OMD>>,
+        attrs: Attrs<Attr<'de, OMD>>,
     ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
@@ -746,7 +749,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         mut decimal: Option<CowStr<'de>>,
         mut hexadecimal: Option<CowStr<'de>>,
         mut map: A,
-        attrs: Vec<Attr<'de, OMD>>,
+        attrs: Attrs<Attr<'de, OMD>>,
     ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
@@ -799,7 +802,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         _id: Option<&str>,
         mut string: Option<CowStr<'de>>,
         mut map: A,
-        attrs: Vec<Attr<'de, OMD>>,
+        attrs: Attrs<Attr<'de, OMD>>,
     ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
@@ -828,7 +831,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         mut bytes: Option<CowBytes<'de>>,
         mut base64: Option<CowStr<'de>>,
         mut map: A,
-        attrs: Vec<Attr<'de, OMD>>,
+        attrs: Attrs<Attr<'de, OMD>>,
     ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
@@ -873,7 +876,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         _id: Option<&str>,
         mut name: Option<CowStr<'de>>,
         mut map: A,
-        attrs: Vec<Attr<'de, OMD>>,
+        attrs: Attrs<Attr<'de, OMD>>,
     ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
@@ -907,7 +910,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         mut cd: Option<CowStr<'de>>,
         mut name: Option<CowStr<'de>>,
         mut map: A,
-        attrs: Vec<Attr<'de, OMD>>,
+        attrs: Attrs<Attr<'de, OMD>>,
     ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
@@ -949,7 +952,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         error: Option<serde::__private::de::Content<'de>>,
         arguments: Option<serde::__private::de::Content<'de>>,
         mut map: A,
-        attrs: Vec<Attr<'de, OMD>>,
+        attrs: Attrs<Attr<'de, OMD>>,
     ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
@@ -1011,7 +1014,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         applicant: Option<serde::__private::de::Content<'de>>,
         arguments: Option<serde::__private::de::Content<'de>>,
         mut map: A,
-        attrs: Vec<Attr<'de, OMD>>,
+        attrs: Attrs<Attr<'de, OMD>>,
     ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
@@ -1080,7 +1083,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         variables: Option<serde::__private::de::Content<'de>>,
         object: Option<serde::__private::de::Content<'de>>,
         mut map: A,
-        attrs: Vec<Attr<'de, OMD>>,
+        attrs: Attrs<Attr<'de, OMD>>,
     ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
@@ -1203,7 +1206,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         self,
         mut seq: A,
         kind: OMKind,
-        attrs: Vec<Attr<'de, OMD>>,
+        attrs: Attrs<Attr<'de, OMD>>,
     ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::SeqAccess<'de>,
@@ -1272,7 +1275,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         kind: OMKind,
         state: FieldState<'de>,
         map: A,
-        attrs: Vec<Attr<'de, OMD>>,
+        attrs: Attrs<Attr<'de, OMD>>,
     ) -> Result<OMD::Ret, A::Error>
     where
         A: serde::de::MapAccess<'de>,
@@ -1579,7 +1582,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de> serde::de::Visitor<'de>
         let Some(kind) = seq.next_element::<OMKind>()? else {
             return Err(A::Error::custom("missing kind in OpenMath object"));
         };
-        self.seq_om(seq, kind, Vec::new())
+        self.seq_om(seq, kind, Attrs::new())
     }
 
     fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
@@ -1587,7 +1590,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de> serde::de::Visitor<'de>
         A: serde::de::MapAccess<'de>,
     {
         let (kind, state) = Self::map_state(&mut map)?;
-        self.om_map(kind, state, map, Vec::new())
+        self.om_map(kind, state, map, Attrs::new())
     }
 }
 
@@ -1611,7 +1614,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de> serde::de::Visitor<'de>
         if kind == OMKind::OMFOREIGN {
             return Self::visit_seq_omforeign(seq);
         }
-        self.seq_om(seq, kind, Vec::new())
+        self.seq_om(seq, kind, Attrs::new())
             .map(crate::OMMaybeForeign::OM)
     }
 
@@ -1658,7 +1661,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de> serde::de::Visitor<'de>
                 map,
             );
         }
-        self.om_map(kind, state, map, Vec::new())
+        self.om_map(kind, state, map, Attrs::new())
             .map(crate::OMMaybeForeign::OM)
     }
 }
@@ -1736,7 +1739,7 @@ impl<'de, OMD> serde::de::DeserializeSeed<'de> for OMSeq<'de, '_, OMD>
 where
     OMD: OMDeserializable<'de> + 'de,
 {
-    type Value = Vec<OMD::Ret>;
+    type Value = Args<OMD::Ret>;
     #[inline]
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
@@ -1749,7 +1752,7 @@ impl<'de, OMD> serde::de::Visitor<'de> for OMSeq<'de, '_, OMD>
 where
     OMD: OMDeserializable<'de> + 'de,
 {
-    type Value = Vec<OMD::Ret>;
+    type Value = Args<OMD::Ret>;
     #[inline]
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("an optional argument list")
@@ -1759,7 +1762,7 @@ where
     where
         E: serde::de::Error,
     {
-        Ok(Vec::new())
+        Ok(smallvec::SmallVec::new())
     }
     #[inline]
     fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
@@ -1773,7 +1776,7 @@ where
     where
         A: serde::de::SeqAccess<'de>,
     {
-        let mut vec = Vec::new();
+        let mut vec = smallvec::SmallVec::new();
         while let Some(e) =
             seq.next_element_seed(OMDeInner::<OMD>(Cow::Borrowed(self.0), PhantomData))?
         {
@@ -1858,7 +1861,7 @@ where
     }
 }
 
-struct OMWithAttrs<'de, 's, OMD>(Cow<'s, str>, Vec<Attr<'de, OMD>>)
+struct OMWithAttrs<'de, 's, OMD>(Cow<'s, str>, Attrs<Attr<'de, OMD>>)
 where
     OMD: OMDeserializable<'de>;
 
@@ -1960,7 +1963,7 @@ where
     }
 }
 
-struct OMAttrSeq<'de, 's, OMD>(&'s str, &'s mut Vec<Attr<'de, OMD>>)
+struct OMAttrSeq<'de, 's, OMD>(&'s str, &'s mut Attrs<Attr<'de, OMD>>)
 where
     OMD: OMDeserializable<'de>;
 impl<'de, OMD> serde::de::DeserializeSeed<'de> for OMAttrSeq<'de, '_, OMD>
@@ -2004,7 +2007,7 @@ impl<'de, OMD> serde::de::DeserializeSeed<'de> for OMVarSeq<'de, '_, OMD>
 where
     OMD: OMDeserializable<'de> + 'de,
 {
-    type Value = Vec<(Cow<'de, str>, Vec<Attr<'de, OMD>>)>;
+    type Value = Vars<(Cow<'de, str>, Attrs<Attr<'de, OMD>>)>;
     #[inline]
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
@@ -2017,7 +2020,7 @@ impl<'de, OMD> serde::de::Visitor<'de> for OMVarSeq<'de, '_, OMD>
 where
     OMD: OMDeserializable<'de> + 'de,
 {
-    type Value = Vec<(Cow<'de, str>, Vec<Attr<'de, OMD>>)>;
+    type Value = Vars<(Cow<'de, str>, Attrs<Attr<'de, OMD>>)>;
 
     #[inline]
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -2027,8 +2030,8 @@ where
     where
         A: serde::de::SeqAccess<'de>,
     {
-        let mut ret = Vec::new();
-        let mut att = Vec::new();
+        let mut ret = Vars::new();
+        let mut att = Attrs::new();
         while let Some(v) = seq.next_element_seed(OMVarA::<OMD>(self.0, &mut att))? {
             ret.push((v, std::mem::take(&mut att)));
         }
@@ -2036,7 +2039,7 @@ where
     }
 }
 
-struct OMVarA<'de, 's, 'v, OMD>(&'s str, &'v mut Vec<Attr<'de, OMD>>)
+struct OMVarA<'de, 's, 'v, OMD>(&'s str, &'v mut Attrs<Attr<'de, OMD>>)
 where
     OMD: OMDeserializable<'de>;
 impl<'de, OMD> serde::de::DeserializeSeed<'de> for OMVarA<'de, '_, '_, OMD>

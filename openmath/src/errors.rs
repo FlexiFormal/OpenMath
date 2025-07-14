@@ -1,11 +1,11 @@
 /*
-use super::{AsOpenMath, MaybeForeign, OMObjectRef, OPENMATH_BASE_URI, URIRef};
+use super::{AsOpenMath, MaybeForeign, OMObjectRef, CD_BASE, URIRef};
 use std::borrow::Cow;
 
 pub const CD_NAME: &'static str = "error";
 lazy_static! {
     pub static ref UNHANDLED_SYMBOL: URIRef<'static> = URIRef {
-        base_uri: Cow::Borrowed(&OPENMATH_BASE_URI),
+        base_uri: Cow::Borrowed(&CD_BASE),
         cd_name: Cow::Borrowed(CD_NAME),
         name: Cow::Borrowed("unhandled_symbol")
     };

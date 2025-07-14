@@ -13,6 +13,10 @@ use crate::{OMKind, OMMaybeForeign};
 #[cfg(feature = "serde")]
 pub use serde_impl::OMFromSerde;
 
+type Args<T> = smallvec::SmallVec<T, 2>;
+type Vars<T> = smallvec::SmallVec<T, 2>;
+type Attrs<T> = Vec<T>;
+
 pub type OMAttr<'o, I> = crate::Attr<'o, crate::OMMaybeForeign<'o, I>>;
 
 #[allow(rustdoc::redundant_explicit_links)]
@@ -91,7 +95,7 @@ impl<'d> OMDeserializable<'d> for SimplifiedInt {
             OM::OMS { cd, name, .. }
                 if cd == "arith1"
                     && (name == "plus" || name == "times")
-                    && cdbase == openmath::OPENMATH_BASE_URI =>
+                    && cdbase == openmath::CD_BASE =>
             {
                 // works, but without arguments, we can't do anything to it *yet*.
                 // => We send it back, so we can take care of it later, if it
@@ -110,7 +114,7 @@ impl<'d> OMDeserializable<'d> for SimplifiedInt {
                 ..
             } if arguments.iter().all(Either::is_left)
                 && arguments.len() == 2
-                && cdbase == openmath::OPENMATH_BASE_URI =>
+                && cdbase == openmath::CD_BASE =>
             {
                 // An OMA only ends up here, after both the head and all arguments
                 // were fed into this method.
@@ -306,7 +310,7 @@ pub enum OM<'de, I> {
     </div> */
     OMI {
         int: crate::Int<'de>,
-        attrs: Vec<OMAttr<'de, I>>,
+        attrs: Attrs<OMAttr<'de, I>>,
     } = OMKind::OMI as _,
 
     /** <div class="openmath">
@@ -314,7 +318,7 @@ pub enum OM<'de, I> {
     </div> */
     OMF {
         float: f64,
-        attrs: Vec<OMAttr<'de, I>>,
+        attrs: Attrs<OMAttr<'de, I>>,
     } = OMKind::OMF as _,
 
     /** <div class="openmath">
@@ -322,7 +326,7 @@ pub enum OM<'de, I> {
     </div> */
     OMSTR {
         string: Cow<'de, str>,
-        attrs: Vec<OMAttr<'de, I>>,
+        attrs: Attrs<OMAttr<'de, I>>,
     } = OMKind::OMSTR as _,
 
     /** <div class="openmath">
@@ -330,7 +334,7 @@ pub enum OM<'de, I> {
     </div> */
     OMB {
         bytes: Cow<'de, [u8]>,
-        attrs: Vec<OMAttr<'de, I>>,
+        attrs: Attrs<OMAttr<'de, I>>,
     } = OMKind::OMB as _,
 
     ///<div class="openmath">
@@ -343,7 +347,7 @@ pub enum OM<'de, I> {
     ///(Note: We do not enforce that names are valid XML names;)
     OMV {
         name: Cow<'de, str>,
-        attrs: Vec<OMAttr<'de, I>>,
+        attrs: Attrs<OMAttr<'de, I>>,
     } = OMKind::OMV as _,
 
     ///<div class="openmath">
@@ -367,7 +371,7 @@ pub enum OM<'de, I> {
     OMS {
         cd: Cow<'de, str>,
         name: Cow<'de, str>,
-        attrs: Vec<OMAttr<'de, I>>,
+        attrs: Attrs<OMAttr<'de, I>>,
     } = OMKind::OMS as _,
 
     /** <div class="openmath">
@@ -377,8 +381,8 @@ pub enum OM<'de, I> {
     </div> */
     OMA {
         applicant: I,
-        arguments: Vec<I>,
-        attrs: Vec<OMAttr<'de, I>>,
+        arguments: Args<I>,
+        attrs: Attrs<OMAttr<'de, I>>,
     } = OMKind::OMA as _,
 
     /** <div class="openmath">
@@ -390,9 +394,9 @@ pub enum OM<'de, I> {
     </div> */
     OMBIND {
         binder: I,
-        variables: Vec<(Cow<'de, str>, Vec<OMAttr<'de, I>>)>,
+        variables: Vars<(Cow<'de, str>, Attrs<OMAttr<'de, I>>)>,
         object: I,
-        attrs: Vec<OMAttr<'de, I>>,
+        attrs: Attrs<OMAttr<'de, I>>,
     } = OMKind::OMBIND as _,
 
     /** <div class="openmath">
@@ -404,7 +408,7 @@ pub enum OM<'de, I> {
         cd: Cow<'de, str>,
         name: Cow<'de, str>,
         arguments: Vec<OMMaybeForeign<'de, I>>,
-        attrs: Vec<OMAttr<'de, I>>,
+        attrs: Attrs<OMAttr<'de, I>>,
     } = OMKind::OME as _,
 }
 impl<I> OM<'_, I> {
@@ -726,7 +730,7 @@ mod tests {
                         Ok(either::Right(OM::OMS {
                             cd,
                             name,
-                            attrs: Vec::new(),
+                            attrs: Attrs::new(),
                         }))
                     }
                     // some operator application to two arguments
