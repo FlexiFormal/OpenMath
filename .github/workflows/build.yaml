@@ -9,11 +9,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: rustups
-        run: rustup update && rustup target add x86_64-unknown-linux-gnu && rustup target add wasm32-unknown-unknown && rustup toolchain install nightly-x86_64-unknown-linux-gnu && rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
+        run: |
+          rustup update &&
+          rustup target add x86_64-unknown-linux-gnu &&
+          rustup toolchain install nightly-x86_64-unknown-linux-gnu &&
+          rustup +nightly component add miri
       - name: cargo
         run: cargo install --force cargo-make
       - name: openmath tests
         run: cd openmath && cargo make all-tests
+      - name: miri
+        run: cd openmath && cargo make miri
       - name: doc
         run: cd openmath && cargo make doc
       - name: Upload openmath Docs
