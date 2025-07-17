@@ -5,7 +5,6 @@
 //pub(crate) mod serde_aux;
 #[cfg(feature = "serde")]
 pub(crate) mod serde_impl;
-#[cfg(feature = "xml")]
 pub(crate) mod xml;
 use std::borrow::Cow;
 
@@ -46,7 +45,7 @@ can be deserialized, and is implemented for any <code>S where for<'a> S:[OMDeser
   encoding[^1], so using
   [`serde_json`](https://docs.rs/serde_json) allows for deserializing from specification-compliant
   JSON.
-- With the `xml`-feature active, deserialize <span style="font-variant:small-caps;">OpenMath</span> XML
+- deserialize <span style="font-variant:small-caps;">OpenMath</span> XML
   from a `&'de str` using [from_openmath_xml](OMDeserializable::from_openmath_xml).
   If `Self` can be deserialized into owned values (i.e. implements <code>for<'a> [OMDeserializable]<'a></code>),
   the [`OMDeserializableOwned`] trait also provides
@@ -161,9 +160,6 @@ let s = r#"{
 let r = serde_json::from_str::<'_, OMFromSerde<SimplifiedInt>>(s)
     .expect("valid json, openmath, and arithmetic expression");
 assert_eq!(r.into_inner().0, 4);
-# #[cfg(feature = "xml")]
-# {
-// If the xml-feature is active:
 let s = r#"
 <OMA cdbase="http://www.openmath.org/cd">
   <OMS cd="arith1" name="plus"/>
@@ -173,7 +169,6 @@ let s = r#"
     let r = SimplifiedInt::from_openmath_xml(s)
         .expect("valid xml, openmath, and arithmetic expression");
     assert_eq!(r.0, 4);
-# }
 # }
 ```
 [^1]: <https://openmath.org/standard/om20-2019-07-01/omstd20.html#sec_json-the-json-encoding>
@@ -204,7 +199,6 @@ pub trait OMDeserializable<'de>: std::fmt::Debug {
     where
         Self: Sized;
 
-    #[cfg(feature = "xml")]
     /// Deserializes self from a string of <span style="font-variant:small-caps;">OpenMath</span> XML.
     ///
     /// # Errors
@@ -228,7 +222,6 @@ pub trait OMDeserializable<'de>: std::fmt::Debug {
 /// Implemented primarily (and automatically) for types that
 /// implement <code>for<'a> [OMDeserializable]<'a></code>.
 pub trait OMDeserializableOwned: for<'d> OMDeserializable<'d> {
-    #[cfg(feature = "xml")]
     /// Deserializes self from any [Read](std::io::BufRead) of <span style="font-variant:small-caps;">OpenMath</span> XML.
     ///
     /// # Errors
@@ -278,7 +271,6 @@ impl<'de, O: OMDeserializable<'de>> OMObject<'de, O> {
     assert_eq!(OMObject::<i32>::from_openmath_xml(s).expect("is valid"),2);
     ```
     */
-    #[cfg(feature = "xml")]
     #[inline]
     pub fn from_openmath_xml(input: &'de str) -> Result<O, xml::XmlReadError<O::Err>>
     where
@@ -669,7 +661,6 @@ mod tests {
             .expect("valid json, openmath, and arithmetic expression");
     }
 
-    #[cfg(feature = "xml")]
     #[test]
     fn test_oma_deserialization_xml() {
         let s = r#"<OMOBJ cdbase="http://www.openmath.org/cd">
@@ -787,18 +778,14 @@ mod tests {
         let r = serde_json::from_str::<'_, OMFromSerde<SimplifiedInt>>(s)
             .expect("valid json, openmath, and arithmetic expression");
         assert_eq!(r.into_inner().0, 4);
-        #[cfg(feature = "xml")]
-        {
-            // If the xml feature is active:
-            let s = r#"
+        let s = r#"
         <OMA cdbase="http://www.openmath.org/cd">
           <OMS cd="arith1" name="plus"/>
           <OMI>2</OMI>
           <OMI>2</OMI>
         </OMA>"#;
-            let r = SimplifiedInt::from_openmath_xml(s)
-                .expect("valid xml, openmath, and arithmetic expression");
-            assert_eq!(r.0, 4);
-        }
+        let r = SimplifiedInt::from_openmath_xml(s)
+            .expect("valid xml, openmath, and arithmetic expression");
+        assert_eq!(r.0, 4);
     }
 }

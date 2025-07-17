@@ -1,6 +1,6 @@
 [package]
 name = "openmath"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 
 authors = ["Dennis Müller <d.mueller@kwarc.info>"]
@@ -24,8 +24,6 @@ workspace = true
 [features]
 ## Adds serde support
 serde = ["dep:serde", "dep:serde_cow", "ordered-float/serde", "either/serde"]
-## adds deserialization from xml; requires the [quick-xml](https://docs.rs/quick-xml) crate
-xml = ["dep:quick-xml"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -50,9 +48,11 @@ serde_json = { workspace = true, features = ["arbitrary_precision"] }
 document-features = { workspace = true }
 ordered-float = { workspace = true }
 either = { workspace = true }
+either_of = { workspace = true }
 smallvec = { workspace = true }
 thiserror = { workspace = true }
+quick-xml = { workspace = true }
+
 
 serde = { workspace = true, optional = true }
 serde_cow = { workspace = true, optional = true }
-quick-xml = { workspace = true, optional = true }

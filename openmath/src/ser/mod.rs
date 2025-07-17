@@ -36,8 +36,7 @@ allowing the same type to be serialized to different output formats, e.g.:
   JSON.
 - <code>self.[xml](OMSerializable::xml)(pretty_printed:bool)</code> implements
   [Display](std::fmt::Display) using the <span style="font-variant:small-caps;">OpenMath</span>
-  XML specification. Since this does not use any additional crates, this does *not* require
-  the `xml`-feature to be active.
+  XML specification.
 
 # Examples
 
@@ -856,6 +855,61 @@ impl<A: OMSerializable, B: OMSerializable> OMSerializable for either::Either<A, 
             Self::Right(a) => a.as_openmath(serializer),
         }
     }
+}
+
+impl<A: OMSerializable, B: OMSerializable> OMSerializable for either_of::Either<A, B> {
+    #[inline]
+    fn as_openmath<'s, S: OMSerializer<'s>>(&self, serializer: S) -> Result<S::Ok, S::Err> {
+        match self {
+            Self::Left(a) => a.as_openmath(serializer),
+            Self::Right(a) => a.as_openmath(serializer),
+        }
+    }
+}
+
+macro_rules! do_either {
+    (@ A B C) => {either_of::EitherOf3<A,B,C>};
+    (@ A B C D) => {either_of::EitherOf4<A,B,C,D>};
+    (@ A B C D E) => {either_of::EitherOf5<A,B,C,D,E>};
+    (@ A B C D E F) => {either_of::EitherOf6<A,B,C,D,E,F>};
+    (@ A B C D E F G) => {either_of::EitherOf7<A,B,C,D,E,F,G>};
+    (@ A B C D E F G H) => {either_of::EitherOf8<A,B,C,D,E,F,G,H>};
+    (@ A B C D E F G H I) => {either_of::EitherOf9<A,B,C,D,E,F,G,H,I>};
+    (@ A B C D E F G H I J) => {either_of::EitherOf10<A,B,C,D,E,F,G,H,I,J>};
+    (@ A B C D E F G H I J K) => {either_of::EitherOf11<A,B,C,D,E,F,G,H,I,J,K>};
+    (@ A B C D E F G H I J K L) => {either_of::EitherOf12<A,B,C,D,E,F,G,H,I,J,K,L>};
+    (@ A B C D E F G H I J K L M) => {either_of::EitherOf13<A,B,C,D,E,F,G,H,I,J,K,L,M>};
+    (@ A B C D E F G H I J K L M N) => {either_of::EitherOf14<A,B,C,D,E,F,G,H,I,J,K,L,M,N>};
+    (@ A B C D E F G H I J K L M N O) => {either_of::EitherOf15<A,B,C,D,E,F,G,H,I,J,K,L,M,N,O>};
+    (@ A B C D E F G H I J K L M N O P) => {either_of::EitherOf16<A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P>};
+    ($( $($i:ident)*);*) => {
+        $(impl<$($i: OMSerializable),*> OMSerializable for do_either!(@ $($i)*){
+            #[inline]
+            fn as_openmath<'s, S: OMSerializer<'s>>(&self, serializer: S) -> Result<S::Ok, S::Err> {
+                match self {
+                    $(
+                        Self::$i(e) => e.as_openmath(serializer),
+                    )*
+                }
+            }
+        })*
+    }
+}
+do_either! {
+    A B C;
+    A B C D;
+    A B C D E;
+    A B C D E F;
+    A B C D E F G;
+    A B C D E F G H;
+    A B C D E F G H I;
+    A B C D E F G H I J;
+    A B C D E F G H I J K;
+    A B C D E F G H I J K L;
+    A B C D E F G H I J K L M;
+    A B C D E F G H I J K L M N;
+    A B C D E F G H I J K L M N O;
+    A B C D E F G H I J K L M N O P
 }
 
 /// Simple [OMSerializer] that simply implements [Display](std::fmt::Display) and

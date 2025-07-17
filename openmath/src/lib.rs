@@ -536,7 +536,7 @@ impl<'o> de::OMDeserializable<'o> for OpenMath<'o> {
     }
 }
 
-#[cfg(all(test, feature = "xml", feature = "serde"))]
+#[cfg(all(test, feature = "serde"))]
 #[test]
 #[allow(clippy::too_many_lines)]
 fn roundtrip() {

@@ -1,4 +1,4 @@
-A comprehensive Rust library for handling **<span style="font-variant:small-caps;">OpenMath</span>** objects, providing
+A comprehensive Rust library for handling [**<span style="font-variant:small-caps;">OpenMath</span>**](http://openmath.org/) objects, providing
 - An [`OpenMath`] data structure and
 - *almost* zero-copy (de)serialization for various <span style="font-variant:small-caps;">OpenMath</span> formats, including specification-compliant XML, JSON, and arbitrary other formats via [serde](https://docs.rs/serde).
 
@@ -7,7 +7,8 @@ A comprehensive Rust library for handling **<span style="font-variant:small-caps
 - [`OMSerializable`] trait for converting Rust types to <span style="font-variant:small-caps;">OpenMath</span>
 - [`OMDeserializable`] trait for parsing <span style="font-variant:small-caps;">OpenMath</span> into Rust types
 - (with `serde` feature enabled:) support for serde-based formats (JSON, etc.) following the
-  OpenMath JSON specification, specification-conform XML (de)serialization (see [`openmath_serde`](OMSerializable::openmath_serde) and [`OMFromSerde`](de::OMFromSerde)).
+  OpenMath JSON specification (see [`openmath_serde`](OMSerializable::openmath_serde) and [`OMFromSerde`](de::OMFromSerde)).
+- specification-conform XML (de)serialization
 
 ## TODO
 
