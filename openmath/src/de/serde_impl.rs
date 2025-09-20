@@ -304,13 +304,13 @@ struct FieldState<'de> {
     cd: Option<CowStr<'de>>,
     encoding: Option<CowStr<'de>>,
     foreign: Option<CowStr<'de>>,
-    variables: Option<serde::__private::de::Content<'de>>,
-    error: Option<serde::__private::de::Content<'de>>,
-    arguments: Option<serde::__private::de::Content<'de>>,
-    applicant: Option<serde::__private::de::Content<'de>>,
-    binder: Option<serde::__private::de::Content<'de>>,
-    object: Option<serde::__private::de::Content<'de>>,
-    attributes: Option<serde::__private::de::Content<'de>>,
+    variables: Option<serde_value::Value>,
+    error: Option<serde_value::Value>,
+    arguments: Option<serde_value::Value>,
+    applicant: Option<serde_value::Value>,
+    binder: Option<serde_value::Value>,
+    object: Option<serde_value::Value>,
+    attributes: Option<serde_value::Value>,
 }
 
 struct OMVisitor<'de, 's, OMD: OMDeserializable<'de>, const ALLOW_FOREIGN: bool>(
@@ -631,8 +631,8 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         self,
         _id: Option<&str>,
         mut cdbase: Option<CowStr<'de>>,
-        attributes: Option<serde::__private::de::Content<'de>>,
-        mut object: Option<serde::__private::de::Content<'de>>,
+        attributes: Option<serde_value::Value>,
+        mut object: Option<serde_value::Value>,
         mut map: A,
         mut attrs: Attrs<Attr<'de, OMD>>,
     ) -> Result<OMD::Ret, A::Error>
@@ -643,7 +643,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
 
         let mut had_attrs = if let Some(attributes) = attributes {
             OMAttrSeq::<OMD>(cdbase.as_ref().map_or(&self.0, |e| &*e.0), &mut attrs)
-                .deserialize(serde::__private::de::ContentDeserializer::new(attributes))?;
+                .deserialize(serde_value::ValueDeserializer::new(attributes))?;
             true
         } else {
             false
@@ -681,7 +681,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
                 Cow::Borrowed(cdbase.as_ref().map_or(&self.0, |e| &*e.0)),
                 attrs,
             )
-            .deserialize(serde::__private::de::ContentDeserializer::new(object))
+            .deserialize(serde_value::ValueDeserializer::new(object))
             .map(|e| e.0)
         } else {
             Err(A::Error::custom("Missing object for OMATTR"))
@@ -949,8 +949,8 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         self,
         _id: Option<&str>,
         mut cdbase: Option<CowStr<'de>>,
-        error: Option<serde::__private::de::Content<'de>>,
-        arguments: Option<serde::__private::de::Content<'de>>,
+        error: Option<serde_value::Value>,
+        arguments: Option<serde_value::Value>,
         mut map: A,
         attrs: Attrs<Attr<'de, OMD>>,
     ) -> Result<OMD::Ret, A::Error>
@@ -959,16 +959,16 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
     {
         use serde::de::Error;
         let mut error = if let Some(error) = error {
-            Some(OMS::deserialize(
-                serde::__private::de::ContentDeserializer::new(error),
-            )?)
+            Some(OMS::deserialize(serde_value::ValueDeserializer::new(
+                error,
+            ))?)
         } else {
             None
         };
         let mut arguments = if let Some(arguments) = arguments {
             Some(
                 OMForeignSeq::<OMD>(cdbase.as_ref().map_or(&self.0, |e| &*e.0), PhantomData)
-                    .deserialize(serde::__private::de::ContentDeserializer::new(arguments))?,
+                    .deserialize(serde_value::ValueDeserializer::new(arguments))?,
             )
         } else {
             None
@@ -1011,8 +1011,8 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         self,
         _id: Option<&str>,
         mut cdbase: Option<CowStr<'de>>,
-        applicant: Option<serde::__private::de::Content<'de>>,
-        arguments: Option<serde::__private::de::Content<'de>>,
+        applicant: Option<serde_value::Value>,
+        arguments: Option<serde_value::Value>,
         mut map: A,
         attrs: Attrs<Attr<'de, OMD>>,
     ) -> Result<OMD::Ret, A::Error>
@@ -1026,7 +1026,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
                     Cow::Borrowed(cdbase.as_ref().map_or(&self.0, |e| &*e.0)),
                     PhantomData,
                 )
-                .deserialize(serde::__private::de::ContentDeserializer::new(applicant))?,
+                .deserialize(serde_value::ValueDeserializer::new(applicant))?,
             )
         } else {
             None
@@ -1034,7 +1034,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         let mut arguments = if let Some(arguments) = arguments {
             Some(
                 OMSeq::<OMD>(cdbase.as_ref().map_or(&self.0, |e| &*e.0), PhantomData)
-                    .deserialize(serde::__private::de::ContentDeserializer::new(arguments))?,
+                    .deserialize(serde_value::ValueDeserializer::new(arguments))?,
             )
         } else {
             None
@@ -1079,9 +1079,9 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         self,
         _id: Option<&str>,
         mut cdbase: Option<CowStr<'de>>,
-        binder: Option<serde::__private::de::Content<'de>>,
-        variables: Option<serde::__private::de::Content<'de>>,
-        object: Option<serde::__private::de::Content<'de>>,
+        binder: Option<serde_value::Value>,
+        variables: Option<serde_value::Value>,
+        object: Option<serde_value::Value>,
         mut map: A,
         attrs: Attrs<Attr<'de, OMD>>,
     ) -> Result<OMD::Ret, A::Error>
@@ -1095,7 +1095,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
                     Cow::Borrowed(cdbase.as_ref().map_or(&self.0, |e| &*e.0)),
                     PhantomData,
                 )
-                .deserialize(serde::__private::de::ContentDeserializer::new(binder))?,
+                .deserialize(serde_value::ValueDeserializer::new(binder))?,
             )
         } else {
             None
@@ -1106,7 +1106,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
                     Cow::Borrowed(cdbase.as_ref().map_or(&self.0, |e| &*e.0)),
                     PhantomData,
                 )
-                .deserialize(serde::__private::de::ContentDeserializer::new(object))?,
+                .deserialize(serde_value::ValueDeserializer::new(object))?,
             )
         } else {
             None
@@ -1115,7 +1115,7 @@ impl<'de, OMD: OMDeserializable<'de> + 'de, const ALLOW_FOREIGN: bool>
         let mut variables = if let Some(variables) = variables {
             Some(
                 OMVarSeq::<OMD>(cdbase.as_ref().map_or(&self.0, |e| &*e.0), PhantomData)
-                    .deserialize(serde::__private::de::ContentDeserializer::new(variables))?,
+                    .deserialize(serde_value::ValueDeserializer::new(variables))?,
             )
         } else {
             None
@@ -2160,8 +2160,8 @@ where
         let mut id: Option<CowStr<'de>> = None;
         let mut name: Option<CowStr<'de>> = None;
         let mut cdbase: Option<CowStr<'de>> = None;
-        let mut object: Option<serde::__private::de::Content<'de>> = None;
-        let mut attributes: Option<serde::__private::de::Content<'de>> = None;
+        let mut object: Option<serde_value::Value> = None;
+        let mut attributes: Option<serde_value::Value> = None;
 
         while let Some(key) = map.next_key()? {
             match key {
@@ -2233,8 +2233,8 @@ where
         self,
         _id: Option<&str>,
         mut cdbase: Option<CowStr<'de>>,
-        attributes: Option<serde::__private::de::Content<'de>>,
-        mut object: Option<serde::__private::de::Content<'de>>,
+        attributes: Option<serde_value::Value>,
+        mut object: Option<serde_value::Value>,
         mut map: A,
     ) -> Result<Cow<'de, str>, A::Error>
     where
@@ -2244,7 +2244,7 @@ where
 
         let mut had_attrs = if let Some(attributes) = attributes {
             OMAttrSeq::<OMD>(cdbase.as_ref().map_or(self.0, |e| &*e.0), self.1)
-                .deserialize(serde::__private::de::ContentDeserializer::new(attributes))?;
+                .deserialize(serde_value::ValueDeserializer::new(attributes))?;
             true
         } else {
             false
@@ -2277,7 +2277,7 @@ where
         }
 
         if let Some(object) = object {
-            Self(self.0, self.1).deserialize(serde::__private::de::ContentDeserializer::new(object))
+            Self(self.0, self.1).deserialize(serde_value::ValueDeserializer::new(object))
         } else {
             Err(A::Error::custom("Missing object for OMATTR"))
         }

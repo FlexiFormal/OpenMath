@@ -1,6 +1,6 @@
 [package]
 name = "openmath"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2024"
 
 authors = ["Dennis Müller <d.mueller@kwarc.info>"]
@@ -23,7 +23,7 @@ workspace = true
 
 [features]
 ## Adds serde support
-serde = ["dep:serde", "dep:serde_cow", "ordered-float/serde", "either/serde"]
+serde = ["dep:serde", "dep:serde-value", "dep:serde_cow", "ordered-float/serde", "either/serde"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -55,4 +55,5 @@ quick-xml = { workspace = true }
 
 
 serde = { workspace = true, optional = true }
+serde-value = { workspace = true, optional = true }
 serde_cow = { workspace = true, optional = true }

@@ -560,44 +560,6 @@ impl_int_deserializable! {
 mod tests {
     use super::*;
 
-    #[derive(Debug, PartialEq, Clone)]
-    struct TestVariable(String);
-
-    impl<'de> OMDeserializable<'de> for TestVariable {
-        type Ret = Self;
-        type Err = String;
-
-        fn from_openmath(om: OM<'de, Self>, _: &str) -> Result<Self, Self::Err> {
-            match om {
-                OM::OMV { name, .. } => Ok(Self(name.to_string())),
-                _ => Err("wrong".to_string()),
-            }
-        }
-    }
-
-    #[derive(Debug, PartialEq, Clone)]
-    struct TestSymbol {
-        cdbase: String,
-        cd: String,
-        name: String,
-    }
-
-    impl<'de> OMDeserializable<'de> for TestSymbol {
-        type Ret = Self;
-        type Err = &'static str;
-
-        fn from_openmath(om: OM<'de, Self>, cdbase: &str) -> Result<Self, Self::Err> {
-            match om {
-                OM::OMS { cd, name, .. } => Ok(Self {
-                    cdbase: cdbase.to_string(),
-                    cd: cd.to_string(),
-                    name: name.to_string(),
-                }),
-                _ => Err("nope"),
-            }
-        }
-    }
-
     #[derive(Copy, Clone, Debug)]
     struct Oma;
     enum ArgOrOMA {
