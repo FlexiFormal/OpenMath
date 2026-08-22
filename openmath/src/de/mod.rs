@@ -403,7 +403,7 @@ pub enum OM<'de, I> {
         attrs: Attrs<OMAttr<'de, I>>,
     } = OMKind::OME as _,
 }
-impl<I> OM<'_, I> {
+impl<'o, I> OM<'o, I> {
     /// Returns the [OMKind] of this [`OM`], which of all practical purposes
     /// acts as a discriminant.
     pub fn kind(&self) -> crate::OMKind {
@@ -413,6 +413,33 @@ impl<I> OM<'_, I> {
         unsafe {
             let u = *<*const _>::from(self).cast::<u8>();
             crate::OMKind::from_u8(u).unwrap_unchecked()
+        }
+    }
+
+    pub fn attrs(&self) -> &[crate::Attr<'o, OMMaybeForeign<'o, I>>] {
+        match self {
+            Self::OMA { attrs, .. }
+            | Self::OMB { attrs, .. }
+            | Self::OMBIND { attrs, .. }
+            | Self::OME { attrs, .. }
+            | Self::OMF { attrs, .. }
+            | Self::OMI { attrs, .. }
+            | Self::OMS { attrs, .. }
+            | Self::OMSTR { attrs, .. }
+            | Self::OMV { attrs, .. } => attrs,
+        }
+    }
+    pub const fn attrs_mut(&mut self) -> &mut Vec<crate::Attr<'o, OMMaybeForeign<'o, I>>> {
+        match self {
+            Self::OMA { attrs, .. }
+            | Self::OMB { attrs, .. }
+            | Self::OMBIND { attrs, .. }
+            | Self::OME { attrs, .. }
+            | Self::OMF { attrs, .. }
+            | Self::OMI { attrs, .. }
+            | Self::OMS { attrs, .. }
+            | Self::OMSTR { attrs, .. }
+            | Self::OMV { attrs, .. } => attrs,
         }
     }
 }

@@ -260,10 +260,22 @@ pub trait OMAttr {
     fn value(&self) -> impl OMOrForeign;
 }
 
-impl<'a, O: ?Sized, S: AsOMS + ?Sized> OMAttr for (&'a S, &'a O)
-where
-    &'a O: OMOrForeign,
-{
+impl<L: OMAttr, R: OMAttr> OMAttr for either::Either<L, R> {
+    fn symbol(&self) -> impl AsOMS {
+        match self {
+            Self::Left(l) => either::Left(l.symbol()),
+            Self::Right(r) => either::Right(r.symbol()),
+        }
+    }
+    fn value(&self) -> impl OMOrForeign {
+        match self {
+            Self::Left(l) => EitherOMOrForeign::L(l.value()),
+            Self::Right(r) => EitherOMOrForeign::R(r.value()),
+        }
+    }
+}
+
+impl<O: OMOrForeign + Copy, S: AsOMS + Copy> OMAttr for (S, O) {
     #[inline]
     fn symbol(&self) -> impl AsOMS {
         self.0
@@ -287,6 +299,38 @@ pub trait OMOrForeign {
         impl OMSerializable,
         (Option<impl std::fmt::Display>, impl std::fmt::Display),
     >;
+}
+
+pub enum EitherOMOrForeign<L: OMOrForeign, R: OMOrForeign> {
+    L(L),
+    R(R),
+}
+impl<L: OMOrForeign, R: OMOrForeign> From<either::Either<L, R>> for EitherOMOrForeign<L, R> {
+    fn from(value: either::Either<L, R>) -> Self {
+        match value {
+            either::Left(l) => Self::L(l),
+            either::Right(r) => Self::R(r),
+        }
+    }
+}
+impl<L: OMOrForeign, R: OMOrForeign> OMOrForeign for EitherOMOrForeign<L, R> {
+    fn om_or_foreign(
+        self,
+    ) -> crate::either::Either<
+        impl OMSerializable,
+        (Option<impl std::fmt::Display>, impl std::fmt::Display),
+    > {
+        match self {
+            Self::L(l) => match l.om_or_foreign() {
+                either::Left(a) => either::Left(either::Left(a)),
+                either::Right((a, b)) => either::Right((a.map(either::Left), either::Left(b))),
+            },
+            Self::R(r) => match r.om_or_foreign() {
+                either::Left(a) => either::Left(either::Right(a)),
+                either::Right((a, b)) => either::Right((a.map(either::Right), either::Right(b))),
+            },
+        }
+    }
 }
 impl<O: OMSerializable> OMOrForeign for O {
     fn om_or_foreign(
@@ -702,6 +746,32 @@ pub trait AsOMS {
         AsOM(self)
     }
 }
+impl<L: AsOMS, R: AsOMS> AsOMS for either::Either<L, R> {
+    fn cdbase(&self, current_cdbase: &str) -> Option<Cow<'_, str>> {
+        match self {
+            Self::Left(l) => l.cdbase(current_cdbase),
+            Self::Right(r) => r.cdbase(current_cdbase),
+        }
+    }
+    fn cd(&self) -> impl std::fmt::Display {
+        match self {
+            Self::Left(l) => either::Left(l.cd()),
+            Self::Right(r) => either::Right(r.cd()),
+        }
+    }
+    fn name(&self) -> impl std::fmt::Display {
+        match self {
+            Self::Left(l) => either::Left(l.name()),
+            Self::Right(r) => either::Right(r.name()),
+        }
+    }
+    fn as_oms(&self) -> impl OMSerializable {
+        match self {
+            Self::Left(l) => either::Left(l.as_oms()),
+            Self::Right(r) => either::Right(r.as_oms()),
+        }
+    }
+}
 impl<A: AsOMS + ?Sized> AsOMS for &A {
     #[inline]
     fn cdbase(&self, current_cdbase: &str) -> Option<Cow<'_, str>> {
@@ -749,9 +819,13 @@ where
     Name: std::fmt::Display,
 {
     fn cdbase(&self, current_cdbase: &str) -> Option<Cow<'_, str>> {
-        self.cdbase
-            .map(Cow::Borrowed)
-            .and_then(|s| if s == current_cdbase { None } else { Some(s) })
+        self.cdbase.and_then(|s| {
+            if s == current_cdbase {
+                None
+            } else {
+                Some(Cow::Borrowed(s))
+            }
+        })
     }
     #[inline]
     fn cd(&self) -> impl std::fmt::Display {
